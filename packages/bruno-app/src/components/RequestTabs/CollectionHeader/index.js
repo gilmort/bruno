@@ -33,6 +33,7 @@ import { getRevealInFolderLabel } from 'utils/common/platform';
 import { normalizePath } from 'utils/common/path';
 import classNames from 'classnames';
 import StyledWrapper from './StyledWrapper';
+import ServiceStatusIndicator from './ServiceStatusIndicator';
 import { useTheme } from 'providers/Theme';
 import { useBetaFeature, BETA_FEATURES } from 'utils/beta-features';
 import StatusBadge from 'ui/StatusBadge/index';
@@ -592,6 +593,7 @@ const CollectionHeader = ({ collection, isScratchCollection }) => {
                 <IconDots size={16} strokeWidth={1.5} />
               </ActionIcon>
             </MenuDropdown>
+            <ServiceStatusIndicator collection={collection} />
             {/* Environment Selector - always visible */}
             <span>
               <EnvironmentSelector collection={collection} />
