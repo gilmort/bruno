@@ -40,6 +40,7 @@ const registerCollectionsIpc = require('./ipc/collection');
 const registerFilesystemIpc = require('./ipc/filesystem');
 const registerPreferencesIpc = require('./ipc/preferences');
 const registerSystemMonitorIpc = require('./ipc/system-monitor');
+const registerGilmortMonitorIpc = require('./ipc/gilmort-monitor');
 const registerWorkspaceIpc = require('./ipc/workspace');
 const registerApiSpecIpc = require('./ipc/apiSpec');
 const registerGitIpc = require('./ipc/git');
@@ -57,10 +58,12 @@ const { safeParseJSON, safeStringifyJSON } = require('./utils/common');
 const { getDomainsWithCookies } = require('./utils/cookies');
 const { cookiesStore } = require('./store/cookies');
 const SystemMonitor = require('./app/system-monitor');
+const { GilmortMonitor } = require('./app/gilmort-monitor');
 const { getIsRunningInRosetta } = require('./utils/arch');
 const { handleAppProtocolUrl, getAppProtocolUrlFromArgv } = require('./utils/deeplink');
 
 const systemMonitor = new SystemMonitor();
+const gilmortMonitor = new GilmortMonitor();
 const terminalManager = new TerminalManager();
 
 const workspaceWatcher = new WorkspaceWatcher();
@@ -467,6 +470,7 @@ app.on('ready', async () => {
   registerNotificationsIpc(mainWindow, collectionWatcher);
   registerFilesystemIpc(mainWindow);
   registerSystemMonitorIpc(mainWindow, systemMonitor);
+  registerGilmortMonitorIpc(mainWindow, gilmortMonitor);
   registerGitIpc(mainWindow);
   registerOpenAPISyncIpc(mainWindow);
 });
@@ -487,6 +491,7 @@ app.on('before-quit', () => {
 
   // Stop system monitoring
   systemMonitor.stop();
+  gilmortMonitor.stop();
 
   try {
     terminalManager.killAll();
