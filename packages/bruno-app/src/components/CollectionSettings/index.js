@@ -11,6 +11,7 @@ import Script from './Script';
 import Test from './Tests';
 import Presets from './Presets';
 import Protobuf from './Protobuf';
+import GilmortConfigs from './GilmortConfigs';
 import StyledWrapper from './StyledWrapper';
 import Vars from './Vars/index';
 import StatusDot from 'components/StatusDot';
@@ -94,6 +95,9 @@ const CollectionSettings = ({ collection }) => {
       case 'protobuf': {
         return <Protobuf collection={collection} />;
       }
+      case 'gilmortConfigs': {
+        return <GilmortConfigs collection={collection} />;
+      }
     }
   };
 
@@ -144,6 +148,9 @@ const CollectionSettings = ({ collection }) => {
         <div className={getTabClassname('protobuf')} role="tab" data-testid="collection-settings-tab-protobuf" onClick={() => setTab('protobuf')}>
           Protobuf
           {protobufConfig.protoFiles && protobufConfig.protoFiles.length > 0 && <StatusDot />}
+        </div>
+        <div className={getTabClassname('gilmortConfigs')} role="tab" data-testid="collection-settings-tab-gilmortConfigs" onClick={() => setTab('gilmortConfigs')}>
+          Gilmort Configs
         </div>
       </div>
       <section className="mt-4 h-full overflow-auto">{getTabPanel(tab)}</section>
