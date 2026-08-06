@@ -2207,6 +2207,22 @@ export const collectionsSlice = createSlice({
         set(collection, 'draft.brunoConfig.proxy', action.payload.proxy);
       }
     },
+    updateCollectionGilmort: (state, action) => {
+      const collection = findCollectionByUid(state.collections, action.payload.collectionUid);
+
+      if (collection) {
+        if (!collection.draft) {
+          collection.draft = {
+            root: cloneDeep(collection.root),
+            brunoConfig: cloneDeep(collection.brunoConfig)
+          };
+        }
+        if (!collection.draft.brunoConfig) {
+          collection.draft.brunoConfig = cloneDeep(collection.brunoConfig);
+        }
+        set(collection, 'draft.brunoConfig.gilmort', action.payload.gilmort);
+      }
+    },
     updateCollectionClientCertificates: (state, action) => {
       const collection = findCollectionByUid(state.collections, action.payload.collectionUid);
 
@@ -2253,6 +2269,22 @@ export const collectionsSlice = createSlice({
           collection.draft.brunoConfig = cloneDeep(collection.brunoConfig);
         }
         set(collection, 'draft.brunoConfig.protobuf', action.payload.protobuf);
+      }
+    },
+    updateCollectionMasterDataMasks: (state, action) => {
+      const collection = findCollectionByUid(state.collections, action.payload.collectionUid);
+
+      if (collection) {
+        if (!collection.draft) {
+          collection.draft = {
+            root: cloneDeep(collection.root),
+            brunoConfig: cloneDeep(collection.brunoConfig)
+          };
+        }
+        if (!collection.draft.brunoConfig) {
+          collection.draft.brunoConfig = cloneDeep(collection.brunoConfig);
+        }
+        set(collection, 'draft.brunoConfig.masterDataMasks', action.payload.masterDataMasks);
       }
     },
     addFolderHeader: (state, action) => {
@@ -3697,9 +3729,11 @@ export const {
   updateCollectionTests,
   updateCollectionDocs,
   updateCollectionProxy,
+  updateCollectionGilmort,
   updateCollectionClientCertificates,
   updateCollectionPresets,
   updateCollectionProtobuf,
+  updateCollectionMasterDataMasks,
   collectionAddFileEvent,
   collectionAddDirectoryEvent,
   collectionChangeFileEvent,
