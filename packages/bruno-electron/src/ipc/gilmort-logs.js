@@ -13,6 +13,7 @@ class GilmortLogsManager {
         const containers = options.containers || [];
         const sessionId = `gilmort_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
         const procs = [];
+        let remaining = containers.length;
 
         containers.forEach((container) => {
           const proc = spawn('docker', ['logs', '-f', '--tail', '200', container]);
@@ -30,6 +31,13 @@ class GilmortLogsManager {
             if (event.sender && !event.sender.isDestroyed()) {
               event.sender.send(`gilmort-logs:data:${sessionId}`, { service: container, line: `[error] ${err.message}` });
             }
+          });
+          proc.on('exit', (code) => {
+            if (event.sender && !event.sender.isDestroyed()) {
+              event.sender.send(`gilmort-logs:exit:${sessionId}`, { service: container, code });
+            }
+            remaining -= 1;
+            if (remaining <= 0) this.sessions.delete(sessionId);
           });
           procs.push(proc);
         });
