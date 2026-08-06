@@ -33,7 +33,8 @@ export const tabsSlice = createSlice({
         'workspaceOverview',
         'workspaceEnvironments',
         'openapi-sync',
-        'openapi-spec'
+        'openapi-spec',
+        'gilmort-logs'
       ];
 
       const existingTab = find(state.tabs, (tab) => tab.uid === uid);
@@ -97,6 +98,7 @@ export const tabsSlice = createSlice({
         tableColumnWidths: {},
         scriptPaneTab: null,
         docsEditing: false,
+        masterDataMaskEnabled: true,
         type: type || 'request',
         ...(uid ? { folderUid: uid } : {}),
         preview: preview !== undefined
@@ -263,6 +265,13 @@ export const tabsSlice = createSlice({
         tab.variablesPaneHeight = action.payload.variablesPaneHeight;
       }
     },
+    updateMasterDataMaskEnabled: (state, action) => {
+      const tab = find(state.tabs, (t) => t.uid === action.payload.uid);
+
+      if (tab) {
+        tab.masterDataMaskEnabled = action.payload.enabled;
+      }
+    },
     closeTabs: (state, action) => {
       const activeTab = find(state.tabs, (t) => t.uid === state.activeTabUid);
       const tabUids = action.payload.tabUids || [];
@@ -402,7 +411,8 @@ export const {
   updateQueryBuilderOpen,
   updateQueryBuilderWidth,
   updateVariablesPaneOpen,
-  updateVariablesPaneHeight
+  updateVariablesPaneHeight,
+  updateMasterDataMaskEnabled
 } = tabsSlice.actions;
 
 export default tabsSlice.reducer;
