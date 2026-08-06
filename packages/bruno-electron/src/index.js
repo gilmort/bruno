@@ -54,6 +54,7 @@ const { globalEnvironmentsManager } = require('./store/workspace-environments');
 const registerNotificationsIpc = require('./ipc/notifications');
 const registerGlobalEnvironmentsIpc = require('./ipc/global-environments');
 const TerminalManager = require('./ipc/terminal');
+const GilmortLogsManager = require('./ipc/gilmort-logs');
 const { safeParseJSON, safeStringifyJSON } = require('./utils/common');
 const { getDomainsWithCookies } = require('./utils/cookies');
 const { cookiesStore } = require('./store/cookies');
@@ -65,6 +66,7 @@ const { handleAppProtocolUrl, getAppProtocolUrlFromArgv } = require('./utils/dee
 const systemMonitor = new SystemMonitor();
 const gilmortMonitor = new GilmortMonitor();
 const terminalManager = new TerminalManager();
+const gilmortLogsManager = new GilmortLogsManager();
 
 const workspaceWatcher = new WorkspaceWatcher();
 const apiSpecWatcher = new ApiSpecWatcher();
@@ -497,6 +499,12 @@ app.on('before-quit', () => {
     terminalManager.killAll();
   } catch (err) {
     console.error('Failed to kill all terminals on quit', err);
+  }
+
+  try {
+    gilmortLogsManager.killAll();
+  } catch (err) {
+    console.error('Failed to kill gilmort logs on quit', err);
   }
 });
 
