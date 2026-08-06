@@ -22,7 +22,12 @@ const GilmortLogs = ({ collection }) => {
     let cancelled = false;
 
     ipcRenderer.invoke('gilmort-logs:start', { containers }).then((sessionId) => {
-      if (cancelled || !sessionId) return;
+      if (!sessionId) return;
+      if (cancelled) {
+        // desmontou antes de resolver: encerra a sessão que o main já criou
+        ipcRenderer.send('gilmort-logs:stop', sessionId);
+        return;
+      }
       sessionRef.current = sessionId;
       unsubscribe = ipcRenderer.on(`gilmort-logs:data:${sessionId}`, ({ service, line }) => {
         setLines((prev) => [...prev.slice(-2000), { service, line }]);
