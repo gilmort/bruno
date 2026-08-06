@@ -9,6 +9,8 @@ const GilmortLogs = ({ collection }) => {
 
   // Only services with a container can be tailed via docker logs.
   const containers = services.filter((s) => s.container).map((s) => s.container);
+  // Stream identifies lines by container (docker name); map back to the service name for display/color.
+  const containerToName = Object.fromEntries(services.filter((s) => s.container).map((s) => [s.container, s.name]));
 
   const [lines, setLines] = useState([]);
   const [enabled, setEnabled] = useState(() => Object.fromEntries(containers.map((c) => [c, true])));
@@ -54,7 +56,7 @@ const GilmortLogs = ({ collection }) => {
         {containers.map((c) => (
           <label key={c} className="flex items-center gap-1 text-xs">
             <input type="checkbox" checked={!!enabled[c]} onChange={(e) => setEnabled((p) => ({ ...p, [c]: e.target.checked }))} />
-            {c}
+            {containerToName[c] || c}
           </label>
         ))}
         <label className="flex items-center gap-1 text-xs ml-auto">
@@ -64,9 +66,12 @@ const GilmortLogs = ({ collection }) => {
       </div>
       <div className="log-area" ref={areaRef}>
         {containers.length === 0 && <div className="text-xs text-muted">Nenhum serviço com container configurado.</div>}
-        {visible.map((l, i) => (
-          <span className={`log-line svc-${l.service}`} key={i}>[{l.service}] {l.line}</span>
-        ))}
+        {visible.map((l, i) => {
+          const name = containerToName[l.service] || l.service;
+          return (
+            <span className={`log-line svc-${name}`} key={i}>[{name}] {l.line}</span>
+          );
+        })}
       </div>
     </StyledWrapper>
   );
