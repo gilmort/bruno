@@ -41,6 +41,7 @@ const registerFilesystemIpc = require('./ipc/filesystem');
 const registerPreferencesIpc = require('./ipc/preferences');
 const registerSystemMonitorIpc = require('./ipc/system-monitor');
 const registerGilmortMonitorIpc = require('./ipc/gilmort-monitor');
+const registerGilmortControlIpc = require('./ipc/gilmort-control');
 const registerWorkspaceIpc = require('./ipc/workspace');
 const registerApiSpecIpc = require('./ipc/apiSpec');
 const registerGitIpc = require('./ipc/git');
@@ -473,6 +474,7 @@ app.on('ready', async () => {
   registerFilesystemIpc(mainWindow);
   registerSystemMonitorIpc(mainWindow, systemMonitor);
   registerGilmortMonitorIpc(mainWindow, gilmortMonitor);
+  registerGilmortControlIpc();
   registerGitIpc(mainWindow);
   registerOpenAPISyncIpc(mainWindow);
 });

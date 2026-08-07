@@ -272,7 +272,7 @@ const RequestTabPanel = () => {
   }
 
   if (focusedTab.type === 'gilmort-logs') {
-    return <GilmortLogs collection={collection} />;
+    return <GilmortLogs />;
   }
 
   if (!item || !item.uid) {

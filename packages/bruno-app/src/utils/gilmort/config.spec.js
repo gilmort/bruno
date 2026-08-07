@@ -1,10 +1,13 @@
 // packages/bruno-app/src/utils/gilmort/config.spec.js
-import { parseGilmortConfig } from './config';
+import { parseGilmortConfig, DEFAULTS } from './config';
 
 describe('parseGilmortConfig', () => {
-  it('accepts a valid config and applies defaults', () => {
+  it('accepts a valid config, applies service + top-level defaults', () => {
     const raw = { services: [{ name: 'SPA', healthUrl: 'http://x/health/spa' }] };
     expect(parseGilmortConfig(raw)).toEqual({
+      composePath: '',
+      healthTimeoutMs: DEFAULTS.healthTimeoutMs,
+      pollIntervalMs: DEFAULTS.pollIntervalMs,
       services: [{ name: 'SPA', healthUrl: 'http://x/health/spa', container: '', expectedStatus: 200 }]
     });
   });
@@ -16,6 +19,20 @@ describe('parseGilmortConfig', () => {
     });
   });
 
+  it('keeps provided composePath and timeouts', () => {
+    const raw = { composePath: '/qa', healthTimeoutMs: 12000, pollIntervalMs: 10000, services: [] };
+    const parsed = parseGilmortConfig(raw);
+    expect(parsed.composePath).toBe('/qa');
+    expect(parsed.healthTimeoutMs).toBe(12000);
+    expect(parsed.pollIntervalMs).toBe(10000);
+  });
+
+  it('accepts a bare services array (back-compat)', () => {
+    const parsed = parseGilmortConfig([{ name: 'BC', healthUrl: 'http://x/health/bc' }]);
+    expect(parsed.services).toHaveLength(1);
+    expect(parsed.composePath).toBe('');
+  });
+
   it('throws when services is not an array', () => {
     expect(() => parseGilmortConfig({ services: 'nope' })).toThrow();
   });
@@ -25,8 +42,7 @@ describe('parseGilmortConfig', () => {
     expect(() => parseGilmortConfig({ services: [{ healthUrl: 'http://x' }] })).toThrow();
   });
 
-  it('throws on non-object root', () => {
+  it('throws on null root', () => {
     expect(() => parseGilmortConfig(null)).toThrow();
-    expect(() => parseGilmortConfig([])).toThrow();
   });
 });

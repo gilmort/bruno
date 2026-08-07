@@ -153,6 +153,12 @@ const stringifyGraphQLRequest = (item: BrunoItem): string => {
 
     ocRequest.settings = settings;
 
+    // masterDataMasks — stored as nested object in yml
+    const settingsAny = httpSettings as any;
+    if (settingsAny?.masterDataMasks && typeof settingsAny.masterDataMasks === 'object' && Object.keys(settingsAny.masterDataMasks).length > 0) {
+      (ocRequest.settings as any).masterDataMasks = settingsAny.masterDataMasks;
+    }
+
     // docs
     if (isNonEmptyString(brunoRequest.docs)) {
       ocRequest.docs = brunoRequest.docs;

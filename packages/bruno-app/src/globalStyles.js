@@ -581,6 +581,47 @@ const GlobalStyle = createGlobalStyle`
     background-color: ${(props) => props.theme.dropdown.hoverBg} !important;
     color: ${(props) => props.theme.dropdown.color} !important;
   }
+
+  .cm-master-data-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+    background-color: ${(props) => props.theme.background?.surface0 || props.theme.colors?.bg?.muted || '#e2e8f0'};
+    color: ${(props) => props.theme.colors?.text?.muted || '#475569'};
+    cursor: pointer;
+  }
+
+  .cm-master-data-tooltip {
+    background-color: ${(props) => props.theme.infoTip?.bg || '#1e293b'};
+    color: ${(props) => props.theme.infoTip?.text || '#f1f5f9'};
+    border: 1px solid ${(props) => props.theme.infoTip?.border || '#334155'};
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .cm-master-data-tooltip-copy {
+      padding: 2px 6px;
+      border-radius: 3px;
+      border: 1px solid ${(props) => props.theme.input?.border || '#64748b'};
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font-size: 10px;
+
+      &:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+      }
+    }
+  }
 `;
 
 export default GlobalStyle;

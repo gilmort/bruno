@@ -1,12 +1,13 @@
 import React, { forwardRef, useRef } from 'react';
 import styled from 'styled-components';
-import { IconDots, IconDownload, IconEraser, IconBookmark, IconCopy, IconLayoutColumns, IconLayoutRows } from '@tabler/icons';
+import { IconDots, IconDownload, IconEraser, IconBookmark, IconCopy, IconLayoutColumns, IconLayoutRows, IconEyeOff } from '@tabler/icons';
 import MenuDropdown from 'ui/MenuDropdown';
 import ResponseDownload from '../ResponseDownload';
 import ResponseBookmark from '../ResponseBookmark';
 import ResponseClear from '../ResponseClear';
 import ResponseLayoutToggle, { useResponseLayoutToggle } from '../ResponseLayoutToggle';
 import ResponseCopy from '../ResponseCopy/index';
+import ResponseMaskToggle from '../ResponseMaskToggle';
 import StyledWrapper from './StyledWrapper';
 
 const StyledMenuIcon = styled.button`
@@ -46,6 +47,7 @@ const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, s
   const clearButtonRef = useRef(null);
   const copyButtonRef = useRef(null);
   const layoutToggleButtonRef = useRef(null);
+  const maskToggleButtonRef = useRef(null);
 
   /**
    * GQL response actions missing with Save response - because their is schema validation missing for saving GQL response will undo once example
@@ -119,6 +121,15 @@ const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, s
       onClick: () => downloadButtonRef.current?.click()
     },
     {
+      id: 'toggle-mask',
+      label: 'Toggle UUID Masks',
+      leftSection: IconEyeOff,
+      get disabled() {
+        return maskToggleButtonRef.current?.isDisabled ?? true;
+      },
+      onClick: () => maskToggleButtonRef.current?.click()
+    },
+    {
       id: 'clear-response',
       label: 'Clear response',
       leftSection: IconEraser,
@@ -154,6 +165,7 @@ const ResponsePaneActions = ({ item, collection, responseSize, selectedFormat, s
         </MenuDropdown>
       </div>
       <div className="actions-buttons flex items-center gap-[2px]">
+        <ResponseMaskToggle ref={maskToggleButtonRef} item={item} />
         <ResponseCopy
           ref={copyButtonRef}
           item={item}

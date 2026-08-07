@@ -39,13 +39,13 @@ const grammar = ohm.grammar(`Bru {
   bodies = bodyjson | bodytext | bodyxml | bodysparql | bodygraphql | bodygraphqlvars | bodyforms | body | bodygrpc | bodyws
   bodyforms = bodyformurlencoded | bodymultipart | bodyfile
   params = paramspath | paramsquery
-  
+
   // Oauth2 additional parameters
   authOauth2Configs = oauth2AuthReqConfig | oauth2AccessTokenReqConfig | oauth2RefreshTokenReqConfig
-  oauth2AuthReqConfig = oauth2AuthReqHeaders | oauth2AuthReqQueryParams 
+  oauth2AuthReqConfig = oauth2AuthReqHeaders | oauth2AuthReqQueryParams
   oauth2AccessTokenReqConfig = oauth2AccessTokenReqHeaders | oauth2AccessTokenReqQueryParams | oauth2AccessTokenReqBody
   oauth2RefreshTokenReqConfig = oauth2RefreshTokenReqHeaders | oauth2RefreshTokenReqQueryParams | oauth2RefreshTokenReqBody
- 
+
   nl = "\\r"? "\\n"
   st = " " | "\\t"
   stnl = st | nl
@@ -174,7 +174,7 @@ const grammar = ohm.grammar(`Bru {
   // Examples - multiple example blocks
   example = "example" st* "{" nl* examplecontent tagend
   examplecontent = (~tagend any)*
-  
+
   script = scriptreq | scriptres
   scriptreq = "script:pre-request" st* "{" nl* textblock tagend
   scriptres = "script:post-response" st* "{" nl* textblock tagend
@@ -566,6 +566,20 @@ const sem = grammar.createSemantics().addAttribute('ast', {
 
     if (keepAliveInterval) {
       _settings.keepAliveInterval = keepAliveInterval;
+    }
+
+    // Parse masterDataMasks as a JSON object
+    if (settings.masterDataMasks !== undefined) {
+      try {
+        const parsed = typeof settings.masterDataMasks === 'string'
+          ? JSON.parse(settings.masterDataMasks)
+          : settings.masterDataMasks;
+        if (parsed && typeof parsed === 'object') {
+          _settings.masterDataMasks = parsed;
+        }
+      } catch (e) {
+        // Ignore parse errors — leave masterDataMasks out
+      }
     }
 
     return {

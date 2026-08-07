@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import find from 'lodash/find';
+import get from 'lodash/get';
 import { useDispatch, useSelector } from 'react-redux';
 import { updateResponsePaneTab, updateResponseFormat, updateResponseViewTab, updateResponseFilter, updateResponseFilterExpanded } from 'providers/ReduxStore/slices/tabs';
+import useMasterDataCache from 'hooks/useMasterDataCache';
 import QueryResult from './QueryResult';
 import Overlay from './Overlay';
 import Placeholder from './Placeholder';
@@ -40,6 +42,22 @@ const ResponsePane = ({ item, collection }) => {
 
   // Get the focused tab for reading persisted format/view state
   const focusedTab = find(tabs, (t) => t.uid === activeTabUid);
+
+  // Master data masks — read from request item settings
+  const masterDataMasks = item.draft
+    ? get(item, 'draft.settings.masterDataMasks', null)
+    : get(item, 'settings.masterDataMasks', null);
+  const { getMask, refresh: refreshMasterData } = useMasterDataCache(masterDataMasks, collection, item);
+  const maskEnabled = focusedTab?.masterDataMaskEnabled !== false;
+
+  // When mask is toggled ON, refresh the cache (re-fetch if needed)
+  const prevMaskEnabledRef = useRef(maskEnabled);
+  useEffect(() => {
+    if (maskEnabled && !prevMaskEnabledRef.current) {
+      refreshMasterData();
+    }
+    prevMaskEnabledRef.current = maskEnabled;
+  }, [maskEnabled, refreshMasterData]);
 
   // Initialize format and tab only once when data loads.
   const { initialFormat, initialTab, contentType } = useInitialResponseFormat(response?.dataBuffer, response?.headers);
@@ -172,6 +190,8 @@ const ResponsePane = ({ item, collection }) => {
             filterExpanded={focusedTab?.responseFilterExpanded}
             onFilterChange={(value) => dispatch(updateResponseFilter({ uid: activeTabUid, responseFilter: value }))}
             onFilterExpandChange={(expanded) => dispatch(updateResponseFilterExpanded({ uid: activeTabUid, responseFilterExpanded: expanded }))}
+            getMask={getMask}
+            maskEnabled={maskEnabled}
           />
         );
       }

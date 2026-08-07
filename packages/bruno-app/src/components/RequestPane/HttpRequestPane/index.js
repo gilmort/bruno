@@ -13,6 +13,7 @@ import Assertions from 'components/RequestPane/Assertions';
 import Script from 'components/RequestPane/Script';
 import Tests from 'components/RequestPane/Tests';
 import Settings from 'components/RequestPane/Settings';
+import MasterDataMasks from 'components/RequestPane/MasterDataMasks';
 import Documentation from 'components/Documentation/index';
 import StatusDot from 'components/StatusDot';
 import ResponsiveTabs from 'ui/ResponsiveTabs';
@@ -29,7 +30,8 @@ const TAB_CONFIG = [
   { key: 'assert', label: 'Assert' },
   { key: 'tests', label: 'Tests' },
   { key: 'docs', label: 'Docs' },
-  { key: 'settings', label: 'Settings' }
+  { key: 'settings', label: 'Settings' },
+  { key: 'dataMasks', label: 'Master Data Masks' }
 ];
 
 const TAB_PANELS = {
@@ -42,7 +44,8 @@ const TAB_PANELS = {
   script: Script,
   tests: Tests,
   docs: Documentation,
-  settings: Settings
+  settings: Settings,
+  dataMasks: MasterDataMasks
 };
 
 const HttpRequestPane = ({ item, collection }) => {
@@ -72,6 +75,10 @@ const HttpRequestPane = ({ item, collection }) => {
   const auth = getProperty('request.auth');
   const tags = getProperty('tags');
 
+  const rawSettings = item.draft ? get(item, 'draft.settings', {}) : get(item, 'settings', {});
+  const masterDataMasks = rawSettings.masterDataMasks || {};
+  const hasMasterDataMasks = Object.keys(masterDataMasks).length > 0;
+
   const activeCounts = useMemo(() => ({
     params: params.filter((p) => p.enabled).length,
     headers: headers.filter((h) => h.enabled).length,
@@ -100,9 +107,10 @@ const HttpRequestPane = ({ item, collection }) => {
       assert: activeCounts.assertions > 0 ? <sup className="font-medium">{activeCounts.assertions}</sup> : null,
       tests: tests?.length > 0 ? (hasTestError ? <StatusDot type="error" /> : <StatusDot />) : null,
       docs: docs?.length > 0 ? <StatusDot /> : null,
-      settings: tags?.length > 0 ? <StatusDot /> : null
+      settings: tags?.length > 0 ? <StatusDot /> : null,
+      dataMasks: hasMasterDataMasks ? <StatusDot /> : null
     };
-  }, [activeCounts, body.mode, auth.mode, script, item.preRequestScriptErrorMessage, item.postResponseScriptErrorMessage, item.testScriptErrorMessage, tests, docs, tags]);
+  }, [activeCounts, body.mode, auth.mode, script, item.preRequestScriptErrorMessage, item.postResponseScriptErrorMessage, item.testScriptErrorMessage, tests, docs, tags, hasMasterDataMasks]);
 
   const allTabs = useMemo(
     () => TAB_CONFIG.map(({ key, label }) => ({ key, label, indicator: indicators[key] })),

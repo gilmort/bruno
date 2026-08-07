@@ -16,6 +16,7 @@ import stripJsonComments from 'strip-json-comments';
 import { getAllVariables } from 'utils/collections';
 import { setupLinkAware } from 'utils/codemirror/linkAware';
 import { setupLintErrorTooltip } from 'utils/codemirror/lint-errors';
+import { applyMasterDataMasks, clearMasterDataMasks } from 'utils/codemirror/masterDataMask';
 import CodeMirrorSearch from 'components/CodeMirrorSearch/index';
 
 const CodeMirror = require('codemirror');
@@ -198,6 +199,11 @@ export default class CodeEditor extends React.Component {
       // Setup lint error tooltip on line number hover
       this.cleanupLintErrorTooltip = setupLintErrorTooltip(editor);
 
+      // Apply master data masks for read-only response editors
+      if (this.props.readOnly && this.props.getMask && this.props.maskEnabled) {
+        applyMasterDataMasks(editor, this.props.getMask, true);
+      }
+
       // Add mousetrap class so Mousetrap captures shortcuts even when CodeMirror is focused
       const cmInput = editor.getInputField();
       if (cmInput) {
@@ -223,6 +229,34 @@ export default class CodeEditor extends React.Component {
       this.cachedValue = String(this?.props?.value ?? '');
       this.editor.setValue(String(this.props.value) || '');
       this.editor.setCursor(cursor);
+    }
+
+    // Apply or clear master data masks
+    if (this.editor && this.props.readOnly) {
+      const maskChanged = this.props.getMask !== prevProps.getMask
+        || this.props.maskEnabled !== prevProps.maskEnabled
+        || this.props.value !== prevProps.value;
+      if (maskChanged) {
+        if (this.props.getMask && this.props.maskEnabled) {
+          // When value just changed, defer masking until CodeMirror has processed
+          // the new content and updated its viewport — otherwise getViewport()
+          // returns stale line ranges and masks are applied to wrong positions.
+          const valueJustChanged = this.props.value !== prevProps.value;
+          if (valueJustChanged) {
+            // Clear existing marks immediately, then apply after CM renders
+            clearMasterDataMasks(this.editor);
+            requestAnimationFrame(() => {
+              if (this.editor) {
+                applyMasterDataMasks(this.editor, this.props.getMask, true);
+              }
+            });
+          } else {
+            applyMasterDataMasks(this.editor, this.props.getMask, true);
+          }
+        } else {
+          clearMasterDataMasks(this.editor);
+        }
+      }
     }
 
     if (this.editor) {
@@ -271,6 +305,7 @@ export default class CodeEditor extends React.Component {
         this.props.onScroll(this.editor);
       }
 
+      clearMasterDataMasks(this.editor);
       this.editor?._destroyLinkAware?.();
       this.editor.off('change', this._onEdit);
 

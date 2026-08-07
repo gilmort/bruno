@@ -1,42 +1,64 @@
-import React from 'react';
-import { get } from 'lodash';
-import { useDispatch } from 'react-redux';
+import React, { useState } from 'react';
 import toast from 'react-hot-toast';
-import { IconTrash, IconPlus, IconDownload, IconUpload } from '@tabler/icons';
+import { IconTrash, IconPlus, IconDownload, IconUpload, IconDatabaseImport } from '@tabler/icons';
+import { flattenItems, isItemARequest } from 'utils/collections';
 import Button from 'ui/Button';
-import { updateCollectionGilmort } from 'providers/ReduxStore/slices/collections';
-import { saveCollectionSettings } from 'providers/ReduxStore/slices/collections/actions';
-import { parseGilmortConfig, normalizeService } from 'utils/gilmort/config';
+import { parseGilmortConfig, normalizeService, loadGilmortConfig, saveGilmortConfig, DEFAULTS } from 'utils/gilmort/config';
 import StyledWrapper from './StyledWrapper';
 
 const emptyService = { name: '', healthUrl: '', container: '', expectedStatus: 200 };
 
+// Build service entries from a collection's HTTP requests (the masterdata lists).
+const seedFromCollection = (collection) => {
+  const items = flattenItems(collection?.items || []);
+  return items
+    .filter((it) => isItemARequest(it) && it.request?.url)
+    .map((it) => ({ name: it.name, healthUrl: it.request.url, container: '', expectedStatus: 200 }));
+};
+
 const GilmortConfigs = ({ collection }) => {
-  const dispatch = useDispatch();
+  const [config, setConfig] = useState(loadGilmortConfig);
+  const { services, composePath, healthTimeoutMs, pollIntervalMs } = config;
 
-  const services = collection.draft?.brunoConfig
-    ? get(collection, 'draft.brunoConfig.gilmort.services', [])
-    : get(collection, 'brunoConfig.gilmort.services', []);
-
-  const update = (nextServices) => {
-    dispatch(updateCollectionGilmort({ collectionUid: collection.uid, gilmort: { services: nextServices } }));
-  };
+  const patch = (updates) => setConfig((prev) => ({ ...prev, ...updates }));
 
   const setField = (i, field, value) => {
-    const next = services.map((s, idx) => (idx === i ? { ...s, [field]: value } : s));
-    update(next);
+    patch({ services: services.map((s, idx) => (idx === i ? { ...s, [field]: value } : s)) });
   };
-  const addRow = () => update([...services, { ...emptyService }]);
-  const removeRow = (i) => update(services.filter((_, idx) => idx !== i));
-  const handleSave = () => dispatch(saveCollectionSettings(collection.uid));
+  const addRow = () => patch({ services: [...services, { ...emptyService }] });
+  const removeRow = (i) => patch({ services: services.filter((_, idx) => idx !== i) });
+
+  const handleSeed = () => {
+    const seeded = seedFromCollection(collection);
+    if (!seeded.length) {
+      toast.error('Nenhum request HTTP encontrado nesta coleção');
+      return;
+    }
+    const existing = new Set(services.map((s) => s.name));
+    const merged = [...services, ...seeded.filter((s) => !existing.has(s.name))];
+    patch({ services: merged });
+    toast.success(`${merged.length - services.length} serviço(s) adicionado(s) da coleção`);
+  };
+
+  const handleSave = () => {
+    try {
+      saveGilmortConfig(config);
+      toast.success('Gilmort config saved');
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
 
   const handleExport = () => {
-    const blob = new Blob([JSON.stringify({ services: services.map(normalizeService) }, null, 2)], { type: 'application/json' });
+    const clean = parseGilmortConfig(config);
+    const blob = new Blob([JSON.stringify(clean, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = 'gilmort-config.json';
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
@@ -47,7 +69,8 @@ const GilmortConfigs = ({ collection }) => {
     reader.onload = () => {
       try {
         const parsed = parseGilmortConfig(JSON.parse(reader.result));
-        update(parsed.services);
+        setConfig(parsed);
+        saveGilmortConfig(parsed);
         toast.success('Gilmort config imported');
       } catch (err) {
         toast.error(err.message);
@@ -59,7 +82,31 @@ const GilmortConfigs = ({ collection }) => {
 
   return (
     <StyledWrapper className="h-full w-full">
-      <div className="text-xs mb-4 text-muted">Serviços monitorados desta coleção (health-check HTTP + container Docker).</div>
+      <div className="text-xs mb-4 text-muted">Config global (compartilhada por todas as coleções) — monitora health-check HTTP + container Docker.</div>
+
+      <div className="settings-grid mb-4">
+        <label>Caminho do qa-compose (Makefile)</label>
+        <input
+          value={composePath}
+          placeholder="/Users/você/projects/qa-compose"
+          onChange={(e) => patch({ composePath: e.target.value })}
+        />
+        <label>Health check timeout (ms)</label>
+        <input
+          type="number"
+          value={healthTimeoutMs}
+          placeholder={DEFAULTS.healthTimeoutMs}
+          onChange={(e) => patch({ healthTimeoutMs: Number(e.target.value) })}
+        />
+        <label>Intervalo de polling (ms)</label>
+        <input
+          type="number"
+          value={pollIntervalMs}
+          placeholder={DEFAULTS.pollIntervalMs}
+          onChange={(e) => patch({ pollIntervalMs: Number(e.target.value) })}
+        />
+      </div>
+
       <table>
         <thead>
           <tr><th>Nome</th><th>URL health</th><th>Container</th><th>Status esperado</th><th></th></tr>
@@ -79,6 +126,7 @@ const GilmortConfigs = ({ collection }) => {
 
       <div className="flex gap-2 mt-3">
         <Button size="sm" onClick={addRow}><IconPlus size={14} strokeWidth={1.5} /> Add</Button>
+        <Button size="sm" onClick={handleSeed}><IconDatabaseImport size={14} strokeWidth={1.5} /> Seed da coleção</Button>
         <Button size="sm" onClick={handleExport}><IconDownload size={14} strokeWidth={1.5} /> Export</Button>
         <label className="btn btn-sm cursor-pointer flex items-center gap-1">
           <IconUpload size={14} strokeWidth={1.5} /> Import

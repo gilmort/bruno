@@ -19,14 +19,14 @@ const axios = require('axios');
 const { execFile } = require('child_process');
 
 // Real probes ---------------------------------------------------------------
-const httpGet = async (url) => {
-  const res = await axios.get(url, { timeout: 3000, validateStatus: () => true });
+const httpGet = async (url, timeoutMs = 8000) => {
+  const res = await axios.get(url, { timeout: timeoutMs, validateStatus: () => true });
   return res.status;
 };
 
-const dockerInspect = (container) =>
+const dockerInspect = (container, timeoutMs = 8000) =>
   new Promise((resolve, reject) => {
-    execFile('docker', ['inspect', '-f', '{{.State.Running}}', container], { timeout: 3000 }, (err, stdout) => {
+    execFile('docker', ['inspect', '-f', '{{.State.Running}}', container], { timeout: timeoutMs }, (err, stdout) => {
       if (err) return reject(err);
       resolve(stdout.trim() === 'true');
     });
@@ -38,12 +38,12 @@ class GilmortMonitor {
     this.isMonitoring = false;
   }
 
-  async checkService(service, deps = { httpGet, dockerInspect }) {
+  async checkService(service, deps = { httpGet, dockerInspect }, timeoutMs = 8000) {
     const expectedStatus = service.expectedStatus ?? 200;
 
     let httpStatus = null;
     try {
-      httpStatus = await deps.httpGet(service.healthUrl);
+      httpStatus = await deps.httpGet(service.healthUrl, timeoutMs);
     } catch (_) {
       httpStatus = null;
     }
@@ -51,7 +51,7 @@ class GilmortMonitor {
     let containerUp = null;
     if (service.container) {
       try {
-        containerUp = await deps.dockerInspect(service.container);
+        containerUp = await deps.dockerInspect(service.container, timeoutMs);
       } catch (_) {
         containerUp = false;
       }
@@ -61,11 +61,13 @@ class GilmortMonitor {
     return { name: service.name, status, containerUp, httpStatus, expectedStatus };
   }
 
-  start(win, { collectionUid, services }, intervalMs = 5000) {
+  start(win, { collectionUid, services, pollIntervalMs, healthTimeoutMs }) {
     this.stop();
     this.isMonitoring = true;
     this.collectionUid = collectionUid;
     this.services = services || [];
+    this.healthTimeoutMs = Number(healthTimeoutMs) > 0 ? Number(healthTimeoutMs) : 8000;
+    const intervalMs = Number(pollIntervalMs) > 0 ? Number(pollIntervalMs) : 5000;
     this.emit(win);
     this.schedule(win, intervalMs);
   }
@@ -80,7 +82,12 @@ class GilmortMonitor {
 
   async emit(win) {
     try {
-      const results = await Promise.all(this.services.map((s) => this.checkService(s)));
+      // Serial, not Promise.all: the health endpoints share one nginx and
+      // firing all probes at once saturates it, tripping timeouts (yellow).
+      const results = [];
+      for (const s of this.services) {
+        results.push(await this.checkService(s, undefined, this.healthTimeoutMs));
+      }
       if (win && !win.isDestroyed()) {
         win.webContents.send('main:gilmort-status', { collectionUid: this.collectionUid, services: results });
       }

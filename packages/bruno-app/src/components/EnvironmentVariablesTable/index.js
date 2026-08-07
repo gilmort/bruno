@@ -136,17 +136,14 @@ const EnvironmentVariablesTable = ({
   const prevEnvVariablesRef = useRef(environment.variables);
   const mountedRef = useRef(false);
 
-  let _collection = collection ? cloneDeep(collection) : {};
-  const globalEnvironmentVariables = getGlobalEnvironmentVariables({ globalEnvironments, activeGlobalEnvironmentUid });
-  if (_collection) {
-    _collection.globalEnvironmentVariables = globalEnvironmentVariables;
-  }
-
-  // When collection is null (global/workspace environments), populate process env
-  // variables from the active workspace so that {{process.env.X}} can resolve
-  if (!collection && activeWorkspace?.processEnvVariables) {
-    _collection.workspaceProcessEnvVariables = activeWorkspace.processEnvVariables;
-  }
+  const _collection = useMemo(() => {
+    const col = collection ? cloneDeep(collection) : {};
+    col.globalEnvironmentVariables = getGlobalEnvironmentVariables({ globalEnvironments, activeGlobalEnvironmentUid });
+    if (!collection && activeWorkspace?.processEnvVariables) {
+      col.workspaceProcessEnvVariables = activeWorkspace.processEnvVariables;
+    }
+    return col;
+  }, [collection?.uid, collection?.environments, globalEnvironments, activeGlobalEnvironmentUid, activeWorkspace?.processEnvVariables]);
 
   const initialValues = useMemo(() => {
     const vars = environment.variables || [];

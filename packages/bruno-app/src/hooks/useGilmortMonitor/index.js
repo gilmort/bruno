@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
-import { get } from 'lodash';
+import { loadGilmortConfig, onGilmortConfigChange } from 'utils/gilmort/config';
 
-const useGilmortMonitor = (collection) => {
+const useGilmortMonitor = () => {
   const [statuses, setStatuses] = useState([]);
+  const [config, setConfig] = useState(loadGilmortConfig);
 
-  const services = collection?.draft?.brunoConfig
-    ? get(collection, 'draft.brunoConfig.gilmort.services', [])
-    : get(collection, 'brunoConfig.gilmort.services', []);
+  useEffect(() => {
+    return onGilmortConfigChange(() => setConfig(loadGilmortConfig()));
+  }, []);
 
-  const servicesKey = JSON.stringify(services);
-  const collectionUid = collection?.uid;
+  const { services, pollIntervalMs, healthTimeoutMs } = config;
+  const configKey = JSON.stringify({ services, pollIntervalMs, healthTimeoutMs });
 
   useEffect(() => {
     const { ipcRenderer } = window;
@@ -20,19 +21,24 @@ const useGilmortMonitor = (collection) => {
     }
 
     const unsubscribe = ipcRenderer.on('main:gilmort-status', (payload) => {
-      if (payload?.collectionUid === collectionUid) setStatuses(payload.services);
+      setStatuses(payload.services);
     });
 
-    ipcRenderer.invoke('renderer:start-gilmort-monitoring', { collectionUid, services });
+    ipcRenderer.invoke('renderer:start-gilmort-monitoring', {
+      collectionUid: 'global',
+      services,
+      pollIntervalMs,
+      healthTimeoutMs
+    });
 
     return () => {
       unsubscribe();
       ipcRenderer.invoke('renderer:stop-gilmort-monitoring');
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [collectionUid, servicesKey]);
+  }, [configKey]);
 
-  return { statuses };
+  return { statuses, services };
 };
 
 export default useGilmortMonitor;

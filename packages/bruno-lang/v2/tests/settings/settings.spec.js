@@ -54,5 +54,35 @@ describe('Settings Conversion Tests', () => {
 
       expect(convertedJson).toEqual(originalJson);
     });
+
+    it('should round-trip masterDataMasks through JSON -> BRU -> JSON', () => {
+      const originalJson = require(path.join(fixturesDir, 'settings-data-masks.json'));
+
+      // Convert JSON to BRU
+      const bru = jsonToBru(originalJson);
+
+      // Convert BRU back to JSON
+      const convertedJson = bruToJson(bru);
+
+      expect(convertedJson).toEqual(originalJson);
+    });
+  });
+
+  describe('masterDataMasks', () => {
+    it('should parse masterDataMasks from BRU to JSON', () => {
+      const input = fs.readFileSync(path.join(fixturesDir, 'settings-data-masks.bru'), 'utf8');
+      const expected = require(path.join(fixturesDir, 'settings-data-masks.json'));
+      const output = bruToJson(input);
+
+      expect(output).toEqual(expected);
+    });
+
+    it('should stringify masterDataMasks from JSON to BRU', () => {
+      const input = require(path.join(fixturesDir, 'settings-data-masks.json'));
+      const expected = fs.readFileSync(path.join(fixturesDir, 'settings-data-masks.bru'), 'utf8');
+      const output = jsonToBru(input);
+
+      expect(output).toEqual(expected);
+    });
   });
 });

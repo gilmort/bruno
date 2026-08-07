@@ -28,7 +28,9 @@ const Dropdown = ({ icon, children, onCreate, placement, transparent, visible, a
       onCreate={onCreate}
       {...tippyProps}
     >
-      {icon}
+      <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+        {icon}
+      </span>
     </Tippy>
   );
 };

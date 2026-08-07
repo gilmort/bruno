@@ -5,7 +5,7 @@ export const sendNetworkRequest = async (item, collection, environment, runtimeV
         .then((response) => {
           // if there is an error, we return the response object as is
           if (response?.error) {
-            resolve(response);
+            return resolve(response);
           }
 
           resolve({

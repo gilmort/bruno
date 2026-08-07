@@ -756,7 +756,13 @@ ${indentString(tests)}
   if (settings && Object.keys(settings).length) {
     bru += 'settings {\n';
     for (const key in settings) {
-      bru += `  ${key}: ${settings[key]}\n`;
+      const val = settings[key];
+      // Objects (like masterDataMasks) are stored as JSON strings
+      if (val !== null && typeof val === 'object') {
+        bru += `  ${key}: ${JSON.stringify(val)}\n`;
+      } else {
+        bru += `  ${key}: ${val}\n`;
+      }
     }
     bru += '}\n\n';
   }

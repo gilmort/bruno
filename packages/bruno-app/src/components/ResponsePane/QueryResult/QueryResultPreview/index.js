@@ -28,7 +28,9 @@ const QueryResultPreview = ({
   codeMirrorMode,
   previewMode,
   disableRunEventListener,
-  displayedTheme
+  displayedTheme,
+  getMask,
+  maskEnabled
 }) => {
   const preferences = useSelector((state) => state.app.preferences);
   const tabs = useSelector((state) => state.tabs.tabs);
@@ -75,6 +77,8 @@ const QueryResultPreview = ({
         mode={codeMirrorMode}
         initialScroll={focusedTab.responsePaneScrollPosition || 0}
         readOnly
+        getMask={getMask}
+        maskEnabled={maskEnabled}
       />
     );
   }
@@ -107,7 +111,7 @@ const QueryResultPreview = ({
       return <VideoPreview contentType={contentType} dataBuffer={dataBuffer} />;
     }
     case 'preview-json': {
-      return <JsonPreview data={data} displayedTheme={displayedTheme} />;
+      return <JsonPreview data={data} displayedTheme={displayedTheme} getMask={getMask} maskEnabled={maskEnabled} />;
     }
 
     case 'preview-text': {

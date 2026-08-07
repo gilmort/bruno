@@ -129,6 +129,12 @@ const parseGraphQLRequest = (ocRequest: GraphQLRequest): BrunoItem => {
     }
 
     brunoItem.settings = settings;
+
+    // masterDataMasks — nested object
+    const settingsAny = ocRequest.settings as any;
+    if (settingsAny.masterDataMasks && typeof settingsAny.masterDataMasks === 'object') {
+      (brunoItem.settings as any).masterDataMasks = settingsAny.masterDataMasks;
+    }
   }
 
   return brunoItem;

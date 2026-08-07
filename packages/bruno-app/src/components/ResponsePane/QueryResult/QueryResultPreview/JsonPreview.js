@@ -1,8 +1,24 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import ReactJson from 'react-json-view';
 import ErrorBanner from 'ui/ErrorBanner';
+import MaskedValue from 'components/MaskedValue';
 
-const JsonPreview = ({ data, displayedTheme }) => {
+const JsonPreview = ({ data, displayedTheme, getMask, maskEnabled = true }) => {
+  const valueRenderer = useCallback((valueAsString, value, ...keyPath) => {
+    if (!maskEnabled || !getMask || typeof value !== 'string') {
+      return valueAsString;
+    }
+    const fieldName = keyPath[0];
+    // keyPath is reversed (leaf-first), e.g. ['planStageNameId', 0, 'stages']
+    // Build the full dot-path: 'stages.0.planStageNameId'
+    const fullPath = [...keyPath].reverse().join('.');
+    const label = getMask(fieldName, value, fullPath);
+    if (label) {
+      return <MaskedValue label={label} originalUuid={value} />;
+    }
+    return valueAsString;
+  }, [getMask, maskEnabled]);
+
   // Helper function to validate and parse JSON data
   const validateJsonData = (data) => {
     // If data is already an object or array, use it directly
@@ -50,6 +66,7 @@ const JsonPreview = ({ data, displayedTheme }) => {
       displayObjectSize={true}
       enableClipboard={true}
       name={false}
+      valueRenderer={valueRenderer}
       style={{
         backgroundColor: 'transparent',
         fontSize: '12px',
