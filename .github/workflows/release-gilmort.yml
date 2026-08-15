@@ -39,8 +39,6 @@ jobs:
           # .app comes from the unpacked out/mac-*/ dir (upload-artifact zips it);
           # .dmg is the installer, .zip is the app auto-update bundle.
           path: |
-            packages/bruno-electron/out/**/*.app
-            packages/bruno-electron/out/*.dmg
             packages/bruno-electron/out/*.zip
           if-no-files-found: error
 
