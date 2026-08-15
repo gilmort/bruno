@@ -110,6 +110,12 @@ export const fromOpenCollectionHttpItem = (ocRequest: HttpRequest): BrunoItem =>
       maxRedirects: typeof ocRequest.settings.maxRedirects === 'number' ? ocRequest.settings.maxRedirects : 5
     };
     brunoItem.settings = settings;
+
+    // Preserve masterDataMasks if present
+    const settingsAny = ocRequest.settings as any;
+    if (settingsAny.masterDataMasks && typeof settingsAny.masterDataMasks === 'object') {
+      (brunoItem.settings as any).masterDataMasks = settingsAny.masterDataMasks;
+    }
   }
 
   if (ocRequest.examples?.length) {
@@ -226,6 +232,11 @@ export const toOpenCollectionHttpItem = (item: BrunoItem): HttpRequest => {
     maxRedirects: typeof brunoSettings?.maxRedirects === 'number' ? brunoSettings.maxRedirects : 5
   };
   ocRequest.settings = settings;
+
+  // Preserve masterDataMasks if present
+  if ((brunoSettings as any)?.masterDataMasks && typeof (brunoSettings as any).masterDataMasks === 'object') {
+    (ocRequest.settings as any).masterDataMasks = (brunoSettings as any).masterDataMasks;
+  }
 
   if (brunoRequest?.docs) {
     ocRequest.docs = brunoRequest.docs;

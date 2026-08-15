@@ -41,6 +41,7 @@ import EnvironmentSettings from 'components/Environments/EnvironmentSettings';
 import GlobalEnvironmentSettings from 'components/Environments/GlobalEnvironmentSettings';
 import OpenAPISyncTab from 'components/OpenAPISyncTab';
 import OpenAPISpecTab from 'components/OpenAPISpecTab';
+import { pluginPanelRegistry } from 'utils/plugins/registry';
 
 const MIN_LEFT_PANE_WIDTH = 300;
 const MIN_RIGHT_PANE_WIDTH = 490;
@@ -193,6 +194,11 @@ const RequestTabPanel = () => {
 
   if (!activeTabUid || !focusedTab) {
     return <div className="pb-4 px-4">Loading...</div>;
+  }
+
+  const PluginPanel = pluginPanelRegistry.get(focusedTab.type);
+  if (PluginPanel) {
+    return <PluginPanel collectionUid={focusedTab.collectionUid} tab={focusedTab} />;
   }
 
   if (focusedTab.type === 'global-environment-settings') {

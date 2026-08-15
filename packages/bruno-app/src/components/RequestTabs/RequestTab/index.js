@@ -264,7 +264,7 @@ const RequestTab = ({ tab, collection, tabIndex, collectionRequestTabs, folderUi
     setShowConfirmGlobalEnvironmentClose(true);
   };
 
-  if (specialTabs.includes(tab.type)) {
+  if (specialTabs.includes(tab.type) || (tab.type && tab.type.startsWith('plugin:'))) {
     return (
       <StyledWrapper
         className={`flex items-center justify-between tab-container px-2 ${tab.preview ? 'italic' : ''}`}

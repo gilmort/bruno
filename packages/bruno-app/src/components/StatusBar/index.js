@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import find from 'lodash/find';
 import { IconSettings, IconCookie, IconTool, IconSearch, IconPalette, IconBrandGithub } from '@tabler/icons';
+import * as TablerIcons from '@tabler/icons';
 import Mousetrap from 'mousetrap';
 import { getKeyBindingsForActionAllOS } from 'providers/Hotkeys/keyMappings';
 import ToolHint from 'components/ToolHint';
@@ -11,6 +12,7 @@ import Portal from 'components/Portal';
 import ThemeDropdown from './ThemeDropdown';
 import { openConsole } from 'providers/ReduxStore/slices/logs';
 import { addTab } from 'providers/ReduxStore/slices/tabs';
+import { uuid } from 'utils/common';
 import { useApp } from 'providers/App';
 import StyledWrapper from './StyledWrapper';
 
@@ -25,6 +27,7 @@ const StatusBar = () => {
   const activeTabUid = useSelector((state) => state.tabs.activeTabUid);
   const activeTab = find(tabs, (t) => t.uid === activeTabUid);
   const logs = useSelector((state) => state.logs.logs);
+  const bottomItems = useSelector((state) => state.plugins.bottomBarItems);
   const [cookiesOpen, setCookiesOpen] = useState(false);
   const { version } = useApp();
 
@@ -116,6 +119,20 @@ const StatusBar = () => {
                 <IconBrandGithub size={16} strokeWidth={1.5} aria-hidden="true" />
               </button>
             </ToolHint>
+
+            {bottomItems.map((item) => {
+              const Icon = TablerIcons[item.icon] || TablerIcons.IconPuzzle;
+              return (
+                <button
+                  key={`${item.pluginId}:${item.id}`}
+                  className="status-bar-button"
+                  aria-label={item.title}
+                  onClick={() => item.panelType && dispatch(addTab({ uid: uuid(), collectionUid: null, type: item.panelType }))}
+                >
+                  <Icon size={16} strokeWidth={1.5} />
+                </button>
+              );
+            })}
           </div>
         </div>
 

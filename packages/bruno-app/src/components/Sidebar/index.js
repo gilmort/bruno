@@ -7,6 +7,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { updateLeftSidebarWidth, updateIsDragging } from 'providers/ReduxStore/slices/app';
 import CollectionsSection from './Sections/CollectionsSection/index';
 import ApiSpecsSection from './Sections/ApiSpecsSection/index';
+import PluginSidebarSection from 'components/Sidebar/Sections/PluginSidebarSection';
 
 const MIN_LEFT_SIDEBAR_WIDTH = 220;
 const MAX_LEFT_SIDEBAR_WIDTH = 600;
@@ -30,6 +31,12 @@ const Sidebar = () => {
 
   const dispatch = useDispatch();
   const [dragging, setDragging] = useState(false);
+
+  const pluginSections = useSelector((state) => state.plugins.sidebarItems);
+  const sections = [
+    ...SIDEBAR_SECTIONS,
+    ...(pluginSections.length ? [{ id: 'plugins', component: PluginSidebarSection }] : [])
+  ];
 
   const currentWidth = sidebarCollapsed ? 0 : asideWidth;
 
@@ -97,7 +104,7 @@ const Sidebar = () => {
               <div className="flex flex-col flex-grow sidebar-sections-container" style={{ minHeight: 0, overflow: 'hidden' }}>
                 <div className="sidebar-sections flex flex-col flex-1">
                   <SidebarContent
-                    sections={SIDEBAR_SECTIONS}
+                    sections={sections}
                   />
                 </div>
               </div>

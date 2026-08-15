@@ -153,6 +153,17 @@ const stringifyGraphQLRequest = (item: BrunoItem): string => {
 
     ocRequest.settings = settings;
 
+    // Chaves de settings de plugins (plugins) — passthrough genérico.
+    const settingsAny = httpSettings as any;
+    const knownKeys = new Set(['encodeUrl', 'timeout', 'followRedirects', 'maxRedirects', 'keepAliveInterval']);
+    if (settingsAny && typeof settingsAny === 'object') {
+      Object.keys(settingsAny).forEach((key) => {
+        if (knownKeys.has(key)) return;
+        const val = settingsAny[key];
+        if (val && typeof val === 'object') (ocRequest.settings as any)[key] = val;
+      });
+    }
+
     // docs
     if (isNonEmptyString(brunoRequest.docs)) {
       ocRequest.docs = brunoRequest.docs;
