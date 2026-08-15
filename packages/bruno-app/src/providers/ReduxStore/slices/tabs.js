@@ -42,7 +42,7 @@ export const tabsSlice = createSlice({
         return;
       }
 
-      if (nonReplaceableTabTypes.includes(type)) {
+      if (nonReplaceableTabTypes.includes(type) || (type && type.startsWith('plugin:'))) {
         const existingTab = tabTypeAlreadyExists(state.tabs, collectionUid, type);
         if (existingTab) {
           state.activeTabUid = existingTab.uid;

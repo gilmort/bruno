@@ -140,6 +140,19 @@ const stringifyHttpRequest = (item: BrunoItem): string => {
 
     ocRequest.settings = settings;
 
+    // Chaves de settings de plugins (plugins) —
+    // passthrough genérico de qualquer chave extra objeto/array, para não hardcodar
+    // por plugin. Preserva a config no yml igual ao .bru faz.
+    const settingsAny = httpSettings as any;
+    const knownKeys = new Set(['encodeUrl', 'timeout', 'followRedirects', 'maxRedirects', 'keepAliveInterval']);
+    if (settingsAny && typeof settingsAny === 'object') {
+      Object.keys(settingsAny).forEach((key) => {
+        if (knownKeys.has(key)) return;
+        const val = settingsAny[key];
+        if (val && typeof val === 'object') (ocRequest.settings as any)[key] = val;
+      });
+    }
+
     // examples
     if (item.examples?.length) {
       const examples: HttpRequestExample[] = item.examples.map((example) => {

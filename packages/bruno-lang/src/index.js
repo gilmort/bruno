@@ -11,6 +11,7 @@ const jsonToCollectionBru = require('../v2/src/jsonToCollectionBru');
 // Changes will have to be made to the CLI and GUI
 
 module.exports = {
+  registerPluginSettingsKeys: bruToJsonV2.registerPluginSettingsKeys,
   bruToJsonV2,
   jsonToBruV2,
   bruToEnvJsonV2,

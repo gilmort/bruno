@@ -129,6 +129,15 @@ const parseGraphQLRequest = (ocRequest: GraphQLRequest): BrunoItem => {
     }
 
     brunoItem.settings = settings;
+
+    // Chaves de settings de plugins (plugins) — passthrough genérico.
+    const settingsAny = ocRequest.settings as any;
+    const knownKeys = new Set(['encodeUrl', 'timeout', 'followRedirects', 'maxRedirects', 'keepAliveInterval']);
+    Object.keys(settingsAny).forEach((key) => {
+      if (knownKeys.has(key)) return;
+      const val = settingsAny[key];
+      if (val && typeof val === 'object') (brunoItem.settings as any)[key] = val;
+    });
   }
 
   return brunoItem;

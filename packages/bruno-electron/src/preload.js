@@ -24,3 +24,7 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   },
   openExternal: (url) => shell.openExternal(url)
 });
+
+// window.bruno (registro de plugins) é montado no MAIN WORLD pelo app
+// (ver bruno-app .../utils/plugins/bootstrap.js), pois componentes React
+// não atravessam o contextBridge. Só IPC (dados) passa por aqui.

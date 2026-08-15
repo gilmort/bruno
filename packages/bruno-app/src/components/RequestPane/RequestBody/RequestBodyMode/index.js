@@ -8,11 +8,15 @@ import {
   IconFileText,
   IconDatabase,
   IconFile,
-  IconX
+  IconX,
+  IconEye,
+  IconEyeOff
 } from '@tabler/icons';
 import MenuDropdown from 'ui/MenuDropdown';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { updateRequestBodyMode } from 'providers/ReduxStore/slices/collections';
+import { setLabelsHidden } from 'providers/ReduxStore/slices/plugins';
+import { pluginEditorDecorators } from 'utils/plugins/registry';
 import { humanizeRequestBodyMode } from 'utils/collections';
 import StyledWrapper from './StyledWrapper';
 import { updateRequestBody } from 'providers/ReduxStore/slices/collections/index';
@@ -48,8 +52,13 @@ const DEFAULT_MODES = [
 
 const RequestBodyMode = ({ item, collection }) => {
   const dispatch = useDispatch();
+  const labelsHidden = useSelector((state) => state.plugins.labelsHidden);
   const body = item.draft ? get(item, 'draft.request.body') : get(item, 'request.body');
   const bodyMode = body?.mode;
+  // Genérico: mostra o toggle de labels quando algum plugin registrou um editor
+  // decorator (ex.: mascara valores no body JSON) e o body é JSON. Sem acoplar a
+  // nenhuma chave de plugin específica.
+  const showLabelsToggle = bodyMode === 'json' && pluginEditorDecorators.count() > 0;
 
   const onModeChange = useCallback((value) => {
     dispatch(
@@ -103,6 +112,23 @@ const RequestBodyMode = ({ item, collection }) => {
 
   return (
     <StyledWrapper>
+      {showLabelsToggle && (
+        <button
+          type="button"
+          className="flex items-center gap-0.5 h-[16px] rounded border px-1 text-[11px] leading-none cursor-pointer select-none transition-colors"
+          style={
+            labelsHidden
+              ? { borderColor: 'rgba(127,127,127,.28)' }
+              : { borderColor: 'rgba(142,68,173,.55)', backgroundColor: 'rgba(142,68,173,.14)', color: '#8e44ad' }
+          }
+          title={labelsHidden ? 'Show labels' : 'Hide labels'}
+          aria-label={labelsHidden ? 'Show labels' : 'Hide labels'}
+          onClick={() => dispatch(setLabelsHidden(!labelsHidden))}
+        >
+          {labelsHidden ? <IconEyeOff size={10} strokeWidth={1.5} /> : <IconEye size={10} strokeWidth={1.5} />}
+          <span>labels</span>
+        </button>
+      )}
       <div className="inline-flex items-center cursor-pointer body-mode-selector" data-testid="request-body-mode-selector">
         <MenuDropdown
           items={menuItems}

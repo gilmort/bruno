@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import find from 'lodash/find';
+import get from 'lodash/get';
 import { useDispatch, useSelector } from 'react-redux';
+import { IconEye, IconEyeOff } from '@tabler/icons';
 import { updateResponsePaneTab, updateResponseFormat, updateResponseViewTab, updateResponseFilter, updateResponseFilterExpanded } from 'providers/ReduxStore/slices/tabs';
+import { setLabelsHidden } from 'providers/ReduxStore/slices/plugins';
+import { pluginValueMaskers } from 'utils/plugins/registry';
 import QueryResult from './QueryResult';
 import Overlay from './Overlay';
 import Placeholder from './Placeholder';
@@ -32,6 +36,7 @@ const ResponsePane = ({ item, collection }) => {
   const dispatch = useDispatch();
   const tabs = useSelector((state) => state.tabs.tabs);
   const activeTabUid = useSelector((state) => state.tabs.activeTabUid);
+  const labelsHidden = useSelector((state) => state.plugins.labelsHidden);
   const isLoading = ['queued', 'sending'].includes(item.requestState);
   const [showScriptErrorCard, setShowScriptErrorCard] = useState(false);
   const rightContentRef = useRef(null);
@@ -243,6 +248,26 @@ const ResponsePane = ({ item, collection }) => {
           {/* Result View Tabs (Visualizations + Response Format) */}
           <div className="result-view-tabs">
 
+            {/* Toggle de labels (request + response), ao lado do seletor de formato.
+                Só quando há masker ativo e o formato é JSON. Roxo sutil quando ativo. */}
+            {selectedFormat === 'json' && pluginValueMaskers.count() > 0 && (
+              <button
+                type="button"
+                className="flex items-center gap-0.5 h-[16px] rounded border px-1 text-[11px] leading-none cursor-pointer select-none transition-colors"
+                style={
+                  labelsHidden
+                    ? { borderColor: 'rgba(127,127,127,.28)' }
+                    : { borderColor: 'rgba(142,68,173,.55)', backgroundColor: 'rgba(142,68,173,.14)', color: '#8e44ad' }
+                }
+                title={labelsHidden ? 'Show labels' : 'Hide labels'}
+                aria-label={labelsHidden ? 'Show labels' : 'Hide labels'}
+                onClick={() => dispatch(setLabelsHidden(!labelsHidden))}
+              >
+                {labelsHidden ? <IconEyeOff size={11} strokeWidth={1.5} /> : <IconEye size={11} strokeWidth={1.5} />}
+                <span>labels</span>
+              </button>
+            )}
+
             {/* Response Format */}
             <QueryResultTypeSelector
               formatOptions={previewFormatOptions}
@@ -281,6 +306,7 @@ const ResponsePane = ({ item, collection }) => {
           />
         ) : null}
       </div>
+
     </div>
   ) : null;
 

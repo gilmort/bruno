@@ -94,7 +94,7 @@ const StyledWrapper = styled.div`
     }
 
     .tab-active .button-dropdown-button {
-      border-color: ${(props) => props.theme.app.collection.toolbar.environmentSelector.border} !important;
+      border-color: transparent !important;
 
       &:hover {
         border-color: ${(props) => props.theme.app.collection.toolbar.environmentSelector.hoverBorder} !important;
