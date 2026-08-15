@@ -1,0 +1,93 @@
+name: Release (gilmort fork)
+
+# Builds the customized (plugin-enabled) Bruno fork for macOS and Linux and
+# publishes the distributables. Run manually from the Actions tab, or push a
+# tag like `v2.0.0-gilmort.0` to also cut a GitHub Release with the artifacts.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*-gilmort*'
+
+permissions:
+  contents: write # needed to create the release on tag builds
+
+jobs:
+  build-mac:
+    name: macOS (.app + .dmg)
+    runs-on: macos-14 # Apple Silicon
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Node + build libraries
+        uses: ./.github/actions/common/setup-node-deps
+      - name: Build web (renderer)
+        run: npm run build:web
+      - name: Build macOS distributables
+        run: npm run build:electron:mac
+        env:
+          # Unsigned fork build (electron-builder-config: identity: null,
+          # notarize: false). Disable auto-discovery so CI never tries to sign.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Read version
+        id: meta
+        run: echo "version=$(node -p "require('./packages/bruno-electron/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bruno-gilmort-mac-${{ steps.meta.outputs.version }}
+          # .app comes from the unpacked out/mac-*/ dir (upload-artifact zips it);
+          # .dmg is the installer, .zip is the app auto-update bundle.
+          path: |
+            packages/bruno-electron/out/**/*.app
+            packages/bruno-electron/out/*.dmg
+            packages/bruno-electron/out/*.zip
+          if-no-files-found: error
+
+  build-linux:
+    name: Linux (AppImage)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Node + build libraries
+        uses: ./.github/actions/common/setup-node-deps
+      - name: Build web (renderer)
+        run: npm run build:web
+      - name: Build Linux distributable
+        run: npm run build:electron:linux # electron-builder --linux AppImage
+      - name: Read version
+        id: meta
+        run: echo "version=$(node -p "require('./packages/bruno-electron/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bruno-gilmort-linux-${{ steps.meta.outputs.version }}
+          path: |
+            packages/bruno-electron/out/*.AppImage
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release (tags only)
+    needs: [build-mac, build-linux]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Bruno (gilmort) ${{ github.ref_name }}
+          body: |
+            Customized Bruno build with the runtime plugin host.
+
+            - **macOS** (unsigned, arm64 + x64): `.app` (zipped) and `.dmg`.
+            - **Linux**: portable `.AppImage`.
+
+            macOS: unsigned, so on first open allow it in Gatekeeper or run
+            `xattr -dr com.apple.quarantine "Bruno.app"`.
+          files: dist/**/*
