@@ -1,7 +1,7 @@
 import React, { useRef, useCallback, useMemo } from 'react';
 import classnames from 'classnames';
 import { useSelector, useDispatch } from 'react-redux';
-import { find, get } from 'lodash';
+import { find, get, isEqual } from 'lodash';
 import { updateRequestPaneTab } from 'providers/ReduxStore/slices/tabs';
 import QueryParams from 'components/RequestPane/QueryParams';
 import RequestHeaders from 'components/RequestPane/RequestHeaders';
@@ -18,6 +18,7 @@ import StatusDot from 'components/StatusDot';
 import ResponsiveTabs from 'ui/ResponsiveTabs';
 import HeightBoundContainer from 'ui/HeightBoundContainer';
 import AuthMode from '../Auth/AuthMode/index';
+import { pluginRequestTabRegistry } from 'utils/plugins/registry';
 
 const TAB_CONFIG = [
   { key: 'params', label: 'Params' },
@@ -31,6 +32,18 @@ const TAB_CONFIG = [
   { key: 'docs', label: 'Docs' },
   { key: 'settings', label: 'Settings' }
 ];
+
+// Config de plugin tem "conteúdo" se, ignorando chaves __internas e objetos vazios,
+// ainda sobra algo. Ex.: { __enabled:true, request:{}, response:{ id:{...} } } → true.
+const hasMeaningfulData = (v) => {
+  if (v == null) return false;
+  if (Array.isArray(v)) return v.length > 0;
+  if (typeof v === 'object') {
+    return Object.keys(v).some((k) => !k.startsWith('__') && hasMeaningfulData(v[k]));
+  }
+  if (typeof v === 'string') return v.length > 0;
+  return true;
+};
 
 const TAB_PANELS = {
   params: QueryParams,
@@ -49,6 +62,7 @@ const HttpRequestPane = ({ item, collection }) => {
   const dispatch = useDispatch();
   const tabs = useSelector((state) => state.tabs.tabs);
   const activeTabUid = useSelector((state) => state.tabs.activeTabUid);
+  const pluginRequestTabs = useSelector((state) => state.plugins.requestTabs);
 
   const rightContentRef = useRef(null);
 
@@ -104,13 +118,26 @@ const HttpRequestPane = ({ item, collection }) => {
     };
   }, [activeCounts, body.mode, auth.mode, script, item.preRequestScriptErrorMessage, item.postResponseScriptErrorMessage, item.testScriptErrorMessage, tests, docs, tags]);
 
+  // Indicador das abas de plugin: por convenção o id da aba é a chave de settings.
+  // Ponto laranja = edição pendente (draft difere do salvo); ponto normal = tem config salva.
+  const pluginIndicator = useCallback((tabId) => {
+    const saved = get(item, `settings.${tabId}`);
+    const drafted = item.draft ? get(item, `draft.settings.${tabId}`) : undefined;
+    if (item.draft && !isEqual(drafted, saved)) return <StatusDot type="pending" />;
+    return hasMeaningfulData(item.draft ? drafted : saved) ? <StatusDot /> : null;
+  }, [item]);
+
   const allTabs = useMemo(
-    () => TAB_CONFIG.map(({ key, label }) => ({ key, label, indicator: indicators[key] })),
-    [indicators]
+    () => [
+      ...TAB_CONFIG.map(({ key, label }) => ({ key, label, indicator: indicators[key] })),
+      ...pluginRequestTabs.map((t) => ({ key: t.tabKey, label: t.label, indicator: pluginIndicator(t.id) }))
+    ],
+    [indicators, pluginRequestTabs, pluginIndicator]
   );
 
   const tabPanel = useMemo(() => {
-    const Component = TAB_PANELS[requestPaneTab];
+    const Component = TAB_PANELS[requestPaneTab]
+      || (requestPaneTab?.startsWith('plugin:') ? pluginRequestTabRegistry.get(requestPaneTab) : null);
     return Component ? <Component item={item} collection={collection} /> : <div className="mt-4">404 | Not found</div>;
   }, [requestPaneTab, item, collection]);
 

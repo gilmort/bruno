@@ -16,6 +16,7 @@ import stripJsonComments from 'strip-json-comments';
 import { getAllVariables } from 'utils/collections';
 import { setupLinkAware } from 'utils/codemirror/linkAware';
 import { setupLintErrorTooltip } from 'utils/codemirror/lint-errors';
+import { pluginEditorDecorators } from 'utils/plugins/registry';
 import CodeMirrorSearch from 'components/CodeMirrorSearch/index';
 
 const CodeMirror = require('codemirror');
@@ -198,6 +199,9 @@ export default class CodeEditor extends React.Component {
       // Setup lint error tooltip on line number hover
       this.cleanupLintErrorTooltip = setupLintErrorTooltip(editor);
 
+      // 4º ponto de extensão: deixa plugins decorarem o editor (ex.: mascarar valores)
+      pluginEditorDecorators.applyAll(editor, { readOnly: !!this.props.readOnly, mode: this.props.mode });
+
       // Add mousetrap class so Mousetrap captures shortcuts even when CodeMirror is focused
       const cmInput = editor.getInputField();
       if (cmInput) {
@@ -223,6 +227,10 @@ export default class CodeEditor extends React.Component {
       this.cachedValue = String(this?.props?.value ?? '');
       this.editor.setValue(String(this.props.value) || '');
       this.editor.setCursor(cursor);
+    }
+
+    if (this.editor && (this.props.value !== prevProps.value || this.props.readOnly !== prevProps.readOnly)) {
+      pluginEditorDecorators.applyAll(this.editor, { readOnly: !!this.props.readOnly, mode: this.props.mode });
     }
 
     if (this.editor) {

@@ -1,6 +1,13 @@
 const Yup = require('yup');
 const { uidSchema } = require('../common');
 
+// Registry de chaves de settings declaradas por plugins (contributes.settingsKeys).
+// O renderer chama registerPluginSettingsKeys quando os manifests chegam.
+const pluginSettingsKeys = new Set();
+const registerPluginSettingsKeys = (keys) => {
+  (keys || []).forEach((k) => { if (typeof k === 'string' && k) pluginSettingsKeys.add(k); });
+};
+
 const environmentVariablesSchema = Yup.object({
   uid: uidSchema,
   name: Yup.string().nullable(),
@@ -117,7 +124,7 @@ const multipartFormSchema = Yup.object({
   .strict();
 
 
-const fileSchema = Yup.object({ 
+const fileSchema = Yup.object({
   uid: uidSchema,
   filePath: Yup.string().nullable(),
   contentType: Yup.string().nullable(),
@@ -189,7 +196,7 @@ const authDigestSchema = Yup.object({
 
   })
     .noUnknown(true)
-    .strict();  
+    .strict();
 
 const authApiKeySchema = Yup.object({
   key: Yup.string().nullable(),
@@ -316,13 +323,13 @@ const oauth2Schema = Yup.object({
     otherwise: Yup.string().nullable().strip()
   }),
   tokenHeaderPrefix: Yup.string().when(['grantType', 'tokenPlacement'], {
-    is: (grantType, tokenPlacement) => 
+    is: (grantType, tokenPlacement) =>
       ['client_credentials', 'password', 'authorization_code', 'implicit'].includes(grantType) && tokenPlacement === 'header',
     then: Yup.string().nullable(),
     otherwise: Yup.string().nullable().strip()
   }),
   tokenQueryKey: Yup.string().when(['grantType', 'tokenPlacement'], {
-    is: (grantType, tokenPlacement) => 
+    is: (grantType, tokenPlacement) =>
       ['client_credentials', 'password', 'authorization_code', 'implicit'].includes(grantType) && tokenPlacement === 'url',
     then: Yup.string().nullable(),
     otherwise: Yup.string().nullable().strip()
@@ -592,8 +599,15 @@ const itemSchema = Yup.object({
         encodeUrl: Yup.boolean().nullable(),
         followRedirects: Yup.boolean().nullable(),
         maxRedirects: Yup.number().min(0).max(50).nullable(),
-        timeout: Yup.mixed().nullable(),
-      }).noUnknown(true)
+        timeout: Yup.mixed().nullable()
+      })
+    // Chaves adicionais só passam se um plugin as declarou (contributes.settingsKeys).
+    .test('plugin-settings-keys', function (value) {
+      if (!value || typeof value !== 'object') return true;
+      const known = new Set(['encodeUrl', 'followRedirects', 'maxRedirects', 'timeout', 'keepAliveInterval']);
+      const bad = Object.keys(value).filter((k) => !known.has(k) && !pluginSettingsKeys.has(k));
+      return bad.length === 0 ? true : this.createError({ message: `settings field has unspecified keys: ${bad.join(', ')}` });
+    })
     .strict()
     .nullable()
     }),
@@ -649,5 +663,6 @@ module.exports = {
   itemSchema,
   environmentSchema,
   environmentsSchema,
-  collectionSchema
+  collectionSchema,
+  registerPluginSettingsKeys
 };

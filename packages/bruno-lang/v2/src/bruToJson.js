@@ -39,13 +39,13 @@ const grammar = ohm.grammar(`Bru {
   bodies = bodyjson | bodytext | bodyxml | bodysparql | bodygraphql | bodygraphqlvars | bodyforms | body | bodygrpc | bodyws
   bodyforms = bodyformurlencoded | bodymultipart | bodyfile
   params = paramspath | paramsquery
-  
+
   // Oauth2 additional parameters
   authOauth2Configs = oauth2AuthReqConfig | oauth2AccessTokenReqConfig | oauth2RefreshTokenReqConfig
-  oauth2AuthReqConfig = oauth2AuthReqHeaders | oauth2AuthReqQueryParams 
+  oauth2AuthReqConfig = oauth2AuthReqHeaders | oauth2AuthReqQueryParams
   oauth2AccessTokenReqConfig = oauth2AccessTokenReqHeaders | oauth2AccessTokenReqQueryParams | oauth2AccessTokenReqBody
   oauth2RefreshTokenReqConfig = oauth2RefreshTokenReqHeaders | oauth2RefreshTokenReqQueryParams | oauth2RefreshTokenReqBody
- 
+
   nl = "\\r"? "\\n"
   st = " " | "\\t"
   stnl = st | nl
@@ -174,7 +174,7 @@ const grammar = ohm.grammar(`Bru {
   // Examples - multiple example blocks
   example = "example" st* "{" nl* examplecontent tagend
   examplecontent = (~tagend any)*
-  
+
   script = scriptreq | scriptres
   scriptreq = "script:pre-request" st* "{" nl* textblock tagend
   scriptres = "script:post-response" st* "{" nl* textblock tagend
@@ -567,6 +567,28 @@ const sem = grammar.createSemantics().addAttribute('ast', {
     if (keepAliveInterval) {
       _settings.keepAliveInterval = keepAliveInterval;
     }
+
+    // Chaves de settings de plugins: passthrough genérico e
+    // livre de registro — preserva qualquer chave desconhecida cujo valor seja um
+    // objeto/array JSON. Sem registry porque o parse roda também em worker thread
+    // (contexto separado), onde um Set registrado no processo principal não existe.
+    // Escalares desconhecidos continuam descartados (evita lixo em settings).
+    const handledSettingKeys = new Set(['followRedirects', 'maxRedirects', 'timeout', 'encodeUrl', 'keepAliveInterval']);
+    Object.keys(settings).forEach((key) => {
+      if (handledSettingKeys.has(key) || _settings[key] !== undefined) return;
+      const raw = settings[key];
+      if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (parsed && typeof parsed === 'object') _settings[key] = parsed;
+          } catch (e) { /* não é JSON válido: descarta */ }
+        }
+      } else if (raw && typeof raw === 'object') {
+        _settings[key] = raw;
+      }
+    });
 
     return {
       settings: _settings
@@ -1199,6 +1221,13 @@ const parser = (input) => {
   } else {
     throw new Error(match.message);
   }
+};
+
+// Registry de chaves de settings declaradas por plugins (contributes.settingsKeys).
+// O host (main process) chama registerPluginSettingsKeys ao carregar os plugins.
+const pluginSettingsKeys = new Set();
+parser.registerPluginSettingsKeys = (keys) => {
+  (keys || []).forEach((k) => { if (typeof k === 'string' && k) pluginSettingsKeys.add(k); });
 };
 
 module.exports = parser;

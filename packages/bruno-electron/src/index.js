@@ -33,6 +33,9 @@ if (os.platform() === 'linux') {
   app.commandLine.appendSwitch('xdg-portal-required-version', '4');
 }
 
+const { registerPluginSchemePrivileged } = require('./plugins/protocol');
+registerPluginSchemePrivileged();
+
 const menuTemplate = require('./app/menu-template');
 const { openCollection } = require('./app/collections');
 const registerNetworkIpc = require('./ipc/network');
@@ -44,6 +47,8 @@ const registerWorkspaceIpc = require('./ipc/workspace');
 const registerApiSpecIpc = require('./ipc/apiSpec');
 const registerGitIpc = require('./ipc/git');
 const registerOpenAPISyncIpc = require('./ipc/openapi-sync');
+const registerPluginsIpc = require('./ipc/plugins');
+const { PluginLoader } = require('./plugins/loader');
 const collectionWatcher = require('./app/collection-watcher');
 const WorkspaceWatcher = require('./app/workspace-watcher');
 const ApiSpecWatcher = require('./app/apiSpecsWatcher');
@@ -62,6 +67,11 @@ const { handleAppProtocolUrl, getAppProtocolUrlFromArgv } = require('./utils/dee
 
 const systemMonitor = new SystemMonitor();
 const terminalManager = new TerminalManager();
+const pluginLoader = new PluginLoader({
+  pluginsDir: path.join(os.homedir(), '.bruno', 'plugins'),
+  ipcMain,
+  getMainWindow: () => mainWindow
+});
 
 const workspaceWatcher = new WorkspaceWatcher();
 const apiSpecWatcher = new ApiSpecWatcher();
@@ -72,7 +82,7 @@ const contentSecurityPolicy = [
   'connect-src \'self\' https://*.posthog.com',
   'font-src \'self\' https: data:;',
   'frame-src data:',
-  'script-src \'self\' data:',
+  'script-src \'self\' data: bruno-plugin:',
   // this has been commented out to make oauth2 work
   // "form-action 'none'",
   // we make an exception and allow http for images so that
@@ -181,6 +191,9 @@ if (useSingleInstance && !gotTheLock) {
 
 // Prepare the renderer once the app is ready
 app.on('ready', async () => {
+  const { registerPluginProtocol } = require('./plugins/protocol');
+  registerPluginProtocol(path.join(os.homedir(), '.bruno', 'plugins'));
+
   initializeShellEnv();
 
   if (isDev) {
@@ -467,6 +480,8 @@ app.on('ready', async () => {
   registerNotificationsIpc(mainWindow, collectionWatcher);
   registerFilesystemIpc(mainWindow);
   registerSystemMonitorIpc(mainWindow, systemMonitor);
+  registerPluginsIpc(mainWindow, pluginLoader);
+  pluginLoader.scan();
   registerGitIpc(mainWindow);
   registerOpenAPISyncIpc(mainWindow);
 });

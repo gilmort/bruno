@@ -1,11 +1,20 @@
 import React from 'react';
 import GradientCloseButton from './GradientCloseButton';
-import { IconVariable, IconSettings, IconRun, IconFolder, IconDatabase, IconWorld, IconHome, IconFileCode } from '@tabler/icons';
+import { IconVariable, IconSettings, IconRun, IconFolder, IconDatabase, IconWorld, IconHome, IconFileCode, IconPuzzle } from '@tabler/icons';
 import OpenAPISyncIcon from 'components/Icons/OpenAPISync';
 import StatusBadge from 'ui/StatusBadge/index';
 
 const SpecialTab = ({ handleCloseClick, type, tabName, handleDoubleClick, hasDraft }) => {
   const getTabInfo = (type, tabName) => {
+    if (type && type.startsWith('plugin:')) {
+      return (
+        <>
+          <IconPuzzle size={14} strokeWidth={1.5} className="special-tab-icon flex-shrink-0" />
+          <span className="ml-1 tab-name">{type.split(':')[2] || 'Plugin'}</span>
+        </>
+      );
+    }
+
     switch (type) {
       case 'collection-settings': {
         return (

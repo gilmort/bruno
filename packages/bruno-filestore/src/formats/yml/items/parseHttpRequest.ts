@@ -127,6 +127,16 @@ const parseHttpRequest = (ocRequest: HttpRequest): BrunoItem => {
     }
 
     brunoItem.settings = settings;
+
+    // Chaves de settings de plugins (plugins) —
+    // passthrough genérico de qualquer chave extra objeto/array na leitura.
+    const settingsAny = ocRequest.settings as any;
+    const knownKeys = new Set(['encodeUrl', 'timeout', 'followRedirects', 'maxRedirects', 'keepAliveInterval']);
+    Object.keys(settingsAny).forEach((key) => {
+      if (knownKeys.has(key)) return;
+      const val = settingsAny[key];
+      if (val && typeof val === 'object') (brunoItem.settings as any)[key] = val;
+    });
   }
 
   // examples

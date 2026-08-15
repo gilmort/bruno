@@ -74,13 +74,10 @@ const QueryResultTypeSelector = ({
   // Get the icon for the currently selected format
   const SelectedFormatIcon = FORMAT_ICONS[formatValue];
 
-  // Determine the prefix icon - eye icon when in preview mode, format icon otherwise
+  // Prefix: só o olho no modo preview (como o body do request, sem ícone de formato)
   const getPrefixIcon = () => {
     if (selectedTab === 'preview') {
       return <IconEye size={14} strokeWidth={2} />;
-    }
-    if (SelectedFormatIcon) {
-      return <SelectedFormatIcon size={14} strokeWidth={1.5} />;
     }
     return null;
   };
