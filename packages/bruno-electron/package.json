@@ -14,7 +14,7 @@
     "clean": "rimraf dist",
     "dev": "electron .",
     "debug": "electron . --inspect=9229",
-    "dist:mac": "electron-builder --mac --publish never --config electron-builder-config.js",
+    "dist:mac": "electron-builder --mac zip --publish never --config electron-builder-config.js",
     "dist:win": "electron-builder --win --config electron-builder-config.js",
     "dist:linux": "electron-builder --linux AppImage --publish never --config electron-builder-config.js",
     "dist:deb": "electron-builder --linux deb --config electron-builder-config.js",
