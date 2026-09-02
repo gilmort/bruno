@@ -12,6 +12,9 @@ const CodeMirror = jest.fn((node, options) => {
     getLine: jest.fn(() => editor._currentValue || ''),
     setOption: jest.fn(),
     refresh: jest.fn(),
+    scrollTo: jest.fn(),
+    getInputField: jest.fn(() => document.createElement('textarea')),
+    getWrapperElement: jest.fn(() => document.createElement('div')),
     off: jest.fn(),
     showHint: jest.fn(),
     on: jest.fn(function (event, handler) {

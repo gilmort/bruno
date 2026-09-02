@@ -2,19 +2,14 @@ import React from 'react';
 import { render, act } from '@testing-library/react';
 import CodeEditor from './index';
 import { ThemeProvider } from 'styled-components';
+import themes from 'themes/index';
 
 jest.mock('codemirror', () => {
   const codemirror = require('test-utils/mocks/codemirror');
   return codemirror;
 });
 
-const MOCK_THEME = {
-  codemirror: {
-    bg: '#1e1e1e',
-    border: '#333'
-  },
-  textLink: '#007acc'
-};
+const MOCK_THEME = themes.dark;
 
 const setupEditorState = (editor, { value, cursorPosition }) => {
   editor._currentValue = value;
@@ -47,5 +42,10 @@ describe('CodeEditor', () => {
     jest.resetModules();
   });
 
-  it('add CodeEditor related tests here', () => {});
+  // Plugins usam o CodeEditor via window.bruno.components e não têm collection/item.
+  // getAllVariables retorna {} quando não há collection — este teste guarda esse contrato.
+  it('mounts without collection/item (plugin usage)', () => {
+    const { ref } = setupEditorWithRef();
+    expect(ref.current.editor).toBeTruthy();
+  });
 });

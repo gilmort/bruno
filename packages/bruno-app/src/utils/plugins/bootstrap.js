@@ -1,17 +1,35 @@
 import React from 'react';
+import ReactDOM from 'react-dom';
+import * as ReactJSXRuntime from 'react/jsx-runtime';
 import { registerPluginSettingsKeys } from '@usebruno/schema';
 import { pluginPanelRegistry, pluginEditorDecorators, pluginValueMaskers, pluginSettingsRegistry, pluginRequestTabRegistry } from './registry';
 import { addSidebarItem, addBottomBarItem, addPanelType, addSettingsPage, addRequestTab, clearRegistrations } from 'providers/ReduxStore/slices/plugins';
 import { updateItemSettings } from 'providers/ReduxStore/slices/collections';
 import { sendRequest, saveRequest, mountCollection } from 'providers/ReduxStore/slices/collections/actions';
+import { addTab } from 'providers/ReduxStore/slices/tabs';
 import { flattenItems, isItemARequest, findCollectionByItemUid, findItemInCollection } from 'utils/collections';
 import pathUtil, { normalizePath } from 'utils/common/path';
+import { uuid } from 'utils/common';
+import CodeEditor from 'components/CodeEditor/index';
 
 const injected = new Set();
+// Contexto opcional passado a um painel via ctx.actions.openPanel (ex: qual item abrir).
+// Chaveado pelo tipo `plugin:<id>:<panel>`; o painel lê com ctx.getPanelContext(tab.type).
+const panelContexts = new Map();
+const PANEL_CONTEXT_EVENT = 'plugin:panel-context';
 
 export function installPluginHost(store) {
   if (window.bruno) return; // idempotente
   window.bruno = {
+    // Expostos globalmente para plugins que bundlam libs React (ex: React Flow) reusarem o
+    // MESMO React do host via shim — evita o problema de "dois Reacts".
+    React,
+    ReactDOM,
+    jsxRuntime: ReactJSXRuntime,
+    // Componentes do host reusáveis por plugins — evita cada plugin reimplementar (ou bundlar) o
+    // que o Bruno já tem. CodeEditor = CodeMirror com busca (Cmd-F) e fold (Cmd-Y/Cmd-I).
+    // `collection`/`item` são opcionais: getAllVariables retorna {} quando não há collection.
+    components: { CodeEditor },
     definePlugin(id, setup) {
       const ctx = {
         React,
@@ -47,8 +65,18 @@ export function installPluginHost(store) {
           sendRequest: (item, collectionUid) => store.dispatch(sendRequest(item, collectionUid)),
           saveRequest: (itemUid, collectionUid) => store.dispatch(saveRequest(itemUid, collectionUid)),
           updateItemSettings: (payload) => store.dispatch(updateItemSettings(payload)),
-          mountCollection: (collection) => store.dispatch(mountCollection({ collectionUid: collection.uid, collectionPathname: collection.pathname, brunoConfig: collection.brunoConfig }))
+          mountCollection: (collection) => store.dispatch(mountCollection({ collectionUid: collection.uid, collectionPathname: collection.pathname, brunoConfig: collection.brunoConfig })),
+          // Abre (ou re-foca) um painel do plugin como uma nova aba, opcionalmente com contexto.
+          // Painéis plugin:* são deduplicados por tipo, então reabrir com outro contexto re-foca a
+          // aba e dispara o evento — o painel aberto se atualiza. O painel lê via ctx.getPanelContext.
+          openPanel: (panelId, context) => {
+            const type = `plugin:${id}:${panelId}`;
+            panelContexts.set(type, context === undefined ? null : context);
+            store.dispatch(addTab({ uid: uuid(), collectionUid: null, type }));
+            window.dispatchEvent(new CustomEvent(PANEL_CONTEXT_EVENT, { detail: { type, context: context === undefined ? null : context } }));
+          }
         },
+        getPanelContext: (type) => panelContexts.get(type),
         utils: {
           flattenItems,
           isItemARequest,
