@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import * as ReactJSXRuntime from 'react/jsx-runtime';
 import { registerPluginSettingsKeys } from '@usebruno/schema';
 import { pluginPanelRegistry, pluginEditorDecorators, pluginValueMaskers, pluginSettingsRegistry, pluginRequestTabRegistry } from './registry';
-import { addSidebarItem, addBottomBarItem, addPanelType, addSettingsPage, addRequestTab, clearRegistrations } from 'providers/ReduxStore/slices/plugins';
+import { addSidebarItem, addBottomBarItem, addPanelType, addSettingsPage, addRequestTab, setHomePanel, clearRegistrations } from 'providers/ReduxStore/slices/plugins';
 import { updateItemSettings } from 'providers/ReduxStore/slices/collections';
 import { sendRequest, saveRequest, mountCollection } from 'providers/ReduxStore/slices/collections/actions';
 import { addTab } from 'providers/ReduxStore/slices/tabs';
@@ -38,6 +38,10 @@ export function installPluginHost(store) {
           pluginPanelRegistry.set(type, Comp);
           store.dispatch(addPanelType(type));
         },
+        // O plugin se candidata a ser a HOME (o que aparece sem aba aberta). O host não conhece
+        // id de plugin nenhum — quem se oferece é o plugin, como já faz com sidebar/bottom bar.
+        registerHomePanel: (panelId) =>
+          store.dispatch(setHomePanel(`plugin:${id}:${panelId}`)),
         registerSidebarItem: (item) =>
           store.dispatch(addSidebarItem({ pluginId: id, ...item })),
         registerBottomBarItem: (item) =>

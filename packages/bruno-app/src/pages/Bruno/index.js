@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import classnames from 'classnames';
 import ManageWorkspace from 'components/ManageWorkspace';
 import RequestTabs from 'components/RequestTabs';
+import { pluginPanelRegistry } from 'utils/plugins/registry';
 import RequestTabPanel from 'components/RequestTabPanel';
 import Sidebar from 'components/Sidebar';
 import StatusBar from 'components/StatusBar';
@@ -78,6 +79,10 @@ export default function Main() {
   const isDragging = useSelector((state) => state.app.isDragging);
   const showApiSpecPage = useSelector((state) => state.app.showApiSpecPage);
   const showManageWorkspacePage = useSelector((state) => state.app.showManageWorkspacePage);
+  // Painel de HOME registrado por um plugin (`registerHomePanel`). Sem plugin que se candidate,
+  // `homePanel` é null e a tela sem aba fica exatamente como sempre foi.
+  const homePanelType = useSelector((state) => state.plugins.homePanel);
+  const HomePanel = homePanelType ? pluginPanelRegistry.get(homePanelType) : null;
   const isConsoleOpen = useSelector((state) => state.logs.isConsoleOpen);
   const saveTransientRequestModals = useSelector((state) => state.collections.saveTransientRequestModals);
   const mainSectionRef = useRef(null);
@@ -142,6 +147,11 @@ export default function Main() {
               <ApiSpecPanel key={activeApiSpecUid} />
             ) : showManageWorkspacePage ? (
               <ManageWorkspace />
+            ) : !activeTabUid && HomePanel ? (
+              /* HOME: sem aba aberta, quem ocupa a tela é o painel que um plugin registrou como
+                 home. Abrir uma request cria aba e a interface normal volta inteira — a home não
+                 substitui nada, ela ocupa o espaço que estava vazio. */
+              <HomePanel />
             ) : (
               <>
                 <RequestTabs />

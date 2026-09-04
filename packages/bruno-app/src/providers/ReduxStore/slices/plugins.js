@@ -9,6 +9,11 @@ const initialState = {
   panelTypes: [],
   settingsPageIds: [],
   requestTabs: [],
+  // Painel de HOME: o que aparece quando nenhuma aba está aberta. Um plugin se candidata com
+  // `registerHomePanel(panelId)`. Fica aqui, e não chumbado no host, porque o host não pode
+  // conhecer o id de um plugin — é o mesmo princípio de sidebarItems/bottomBarItems.
+  // O PRIMEIRO a registrar vence: dois plugins disputando a home seria uma corrida de carga.
+  homePanel: null,
   // Toggle global de visibilidade dos labels de valor (plugins que registram
   // registerValueMasker/registerEditorDecorator). Controlado pelo olho no ResponsePane.
   labelsHidden: false
@@ -47,6 +52,9 @@ export const pluginsSlice = createSlice({
       );
       if (!exists) state.requestTabs.push(action.payload);
     },
+    setHomePanel: (state, action) => {
+      if (!state.homePanel) state.homePanel = action.payload;
+    },
     setLabelsHidden: (state, action) => {
       state.labelsHidden = !!action.payload;
     },
@@ -57,11 +65,12 @@ export const pluginsSlice = createSlice({
       state.panelTypes = state.panelTypes.filter((t) => !t.startsWith(`plugin:${pluginId}:`));
       state.settingsPageIds = state.settingsPageIds.filter((id) => id !== pluginId);
       state.requestTabs = state.requestTabs.filter((t) => t.pluginId !== pluginId);
+      if (state.homePanel && state.homePanel.startsWith(`plugin:${pluginId}:`)) state.homePanel = null;
     }
   }
 });
 
-export const { setPlugins, addSidebarItem, addBottomBarItem, addPanelType, addSettingsPage, addRequestTab, setLabelsHidden, clearRegistrations }
+export const { setPlugins, addSidebarItem, addBottomBarItem, addPanelType, addSettingsPage, addRequestTab, setHomePanel, setLabelsHidden, clearRegistrations }
   = pluginsSlice.actions;
 
 export default pluginsSlice.reducer;
