@@ -23,13 +23,21 @@ class TerminalManager {
           console.log(`Creating new terminal session: ${sessionId} at ${cwd}`);
         }
 
-        const ptyProcess = pty.spawn(shell, [], {
-          name: 'xterm-color',
-          cols: 80,
-          rows: 24,
-          cwd: cwd,
-          env: process.env
-        });
+        // Optional argv: run a command directly instead of an interactive shell. The array is
+        // passed to pty.spawn as argv, never joined into a command line, so an argument that
+        // happens to contain spaces or shell metacharacters stays a single inert argument.
+        // This grants no new privilege: a caller that can open a shell here could already type
+        // the same command into it with terminal:input.
+        const argv = Array.isArray(options.argv) ? options.argv.map(String).filter(Boolean) : null;
+        const ptyProcess = argv && argv.length
+          ? pty.spawn(argv[0], argv.slice(1), { name: 'xterm-color', cols: 80, rows: 24, cwd, env: process.env })
+          : pty.spawn(shell, [], {
+              name: 'xterm-color',
+              cols: 80,
+              rows: 24,
+              cwd: cwd,
+              env: process.env
+            });
 
         // Store terminal session
         this.terminals.set(sessionId, {
