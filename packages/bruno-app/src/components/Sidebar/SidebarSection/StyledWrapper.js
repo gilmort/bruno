@@ -24,6 +24,11 @@ const StyledWrapper = styled.div`
     }
   }
 
+  /* Leaf (plugin de página única): sem chevron, então o ícone fica visível no hover. */
+  .sidebar-section.leaf .section-header-left:hover .section-icon {
+    display: flex;
+  }
+
   .section-header {
     display: flex;
     align-items: center;
