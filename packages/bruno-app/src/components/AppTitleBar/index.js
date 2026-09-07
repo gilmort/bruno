@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { useDispatch, useSelector } from 'react-redux';
 
 import { savePreferences, showManageWorkspacePage, toggleSidebarCollapse } from 'providers/ReduxStore/slices/app';
+import { useIsHomeMode } from 'utils/plugins/homeMode';
 import { closeConsole, openConsole } from 'providers/ReduxStore/slices/logs';
 import { createWorkspaceWithUniqueName, openWorkspaceDialog, switchWorkspace } from 'providers/ReduxStore/slices/workspaces/actions';
 import { sortWorkspaces, toggleWorkspacePin } from 'utils/workspaces';
@@ -111,15 +112,11 @@ const AppTitleBar = () => {
   const preferences = useSelector((state) => state.app.preferences);
   const sidebarCollapsed = useSelector((state) => state.app.sidebarCollapsed);
   const isConsoleOpen = useSelector((state) => state.logs.isConsoleOpen);
-  // MODO HOME: sem aba aberta, sidebar recolhida, e algum plugin se ofereceu como home (a mesma
-  // condição que faz o Bruno/index.js escolher o HomePanel). Nesse estado a topbar normal — home,
-  // troca de workspace, devtools, layout — não serve a nada: não há aba, não há resposta, e trocar
-  // de workspace já reabriria a sidebar sozinho. Fica só o botão que revela as coleções; ele é o
-  // caminho de volta para a interface "original" do Bruno, e é a MESMA ação de sempre
-  // (toggleSidebarCollapse) — nenhum estado novo, só menos botão desenhado.
-  const activeTabUid = useSelector((state) => state.tabs.activeTabUid);
-  const homePanelType = useSelector((state) => state.plugins.homePanel);
-  const isHomeMode = sidebarCollapsed && !activeTabUid && !!homePanelType;
+  // MODO HOME: a MESMA condição que faz Bruno/index.js escolher o HomePanel (utils/plugins/homeMode
+  // — extraído para lá para as duas decisões nunca dessincronizar). Nesse estado a topbar normal —
+  // home, troca de workspace, devtools, layout — não serve a nada; fica só o botão que revela as
+  // coleções, e é a MESMA ação de sempre (toggleSidebarCollapse), nenhum estado novo.
+  const isHomeMode = useIsHomeMode();
   const activeWorkspace = workspaces.find((w) => w.uid === activeWorkspaceUid);
 
   // Sort workspaces according to preferences
