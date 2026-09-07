@@ -7,7 +7,11 @@ const initialState = {
   isDragging: false,
   idbConnectionReady: false,
   leftSidebarWidth: 250,
-  sidebarCollapsed: false,
+  // Nasce recolhida: sem isso um app recém-aberto mostraria a sidebar de coleções por cima do
+  // painel de home do plugin, e o pedido foi "no fundo fica só a dashboard". Abrir/importar uma
+  // coleção já reexpande sozinho (collections/actions.js), então nada muda para quem usa
+  // coleções — só a primeira tela some.
+  sidebarCollapsed: true,
   showSidebarSearch: false,
   focusedSidebarPath: null,
   screenWidth: 500,
