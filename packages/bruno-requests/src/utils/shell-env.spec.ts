@@ -55,6 +55,67 @@ describe('initializeShellEnv', () => {
     delete process.env.SOME_VAR;
   });
 
+  // O caso real que motivou tudo isto: o app foi aberto A PARTIR de um shell (Raycast, terminal,
+  // Dock herdando a sessão), então o token já chegou herdado em process.env com o MESMO valor que
+  // o shell tinha naquele instante. `!(key in process.env)` lê isso como "o SO definiu", a chave
+  // nunca entra em `appliedFromShell`, e nenhuma recarga futura a toca — o token rotacionado
+  // continua velho até reiniciar o app, que é exatamente o sintoma relatado.
+  test('should update a var inherited from the shell at launch', async () => {
+    process.env.INHERITED_TOKEN = 'token_v1';
+    mockShellEnvResult = { INHERITED_TOKEN: 'token_v1' };
+    await initializeShellEnv();
+
+    mockShellEnvResult = { INHERITED_TOKEN: 'token_v2' };
+    await initializeShellEnv();
+
+    expect(process.env.INHERITED_TOKEN).toBe('token_v2');
+    delete process.env.INHERITED_TOKEN;
+  });
+
+  // --- RECARGA: o motivo de `appliedFromShell` existir -------------------------------------
+  // Antes, a guarda era só `if (!(key in process.env))`. Ela protege o que o SO/Electron definiram,
+  // mas também fazia toda leitura seguinte virar no-op: o valor velho vencia para sempre, e trocar
+  // um token rotacionado exigia fechar e reabrir o app.
+  test('should update a var it set itself when the shell value changes', async () => {
+    delete process.env.ROTATING_TOKEN;
+    mockShellEnvResult = { ROTATING_TOKEN: 'token_v1' };
+    await initializeShellEnv();
+    expect(process.env.ROTATING_TOKEN).toBe('token_v1');
+
+    mockShellEnvResult = { ROTATING_TOKEN: 'token_v2' };
+    await initializeShellEnv();
+
+    expect(process.env.ROTATING_TOKEN).toBe('token_v2');
+    delete process.env.ROTATING_TOKEN;
+  });
+
+  // A recarga não pode virar uma porta dos fundos para pisar no ambiente do processo: o que o SO
+  // definiu continua vencendo, na primeira leitura e em todas as outras.
+  test('should still never overwrite a var the process already owned, on reload', async () => {
+    process.env.OS_OWNED = 'from_os';
+    mockShellEnvResult = { OS_OWNED: 'from_shell_v1' };
+    await initializeShellEnv();
+    mockShellEnvResult = { OS_OWNED: 'from_shell_v2' };
+    await initializeShellEnv();
+
+    expect(process.env.OS_OWNED).toBe('from_os');
+    delete process.env.OS_OWNED;
+  });
+
+  // `fetchShellEnv` devolve {} quando o shell não sobe. Tratar isso como "o usuário apagou tudo"
+  // limparia um ambiente que estava funcionando por causa de uma falha passageira.
+  test('should keep a previously applied var when the shell returns nothing', async () => {
+    delete process.env.KEEP_ME;
+    mockShellEnvResult = { KEEP_ME: 'value' };
+    await initializeShellEnv();
+
+    mockShellEnvResult = {};
+    await initializeShellEnv();
+
+    expect(process.env.KEEP_ME).toBe('value');
+    delete process.env.KEEP_ME;
+  });
+
   test('should return empty object on Windows', async () => {
     Object.defineProperty(process, 'platform', { value: 'win32' });
     mockShellEnvResult = { SHOULD_NOT_APPEAR: 'value' };

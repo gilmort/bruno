@@ -3,7 +3,7 @@ const path = require('path');
 const { execSync } = require('node:child_process');
 const isDev = require('electron-is-dev');
 const os = require('os');
-const { initializeShellEnv, waitForShellEnv } = require('./store/shell-env-state');
+const { initializeShellEnv, waitForShellEnv, markShellEnvStale, refreshShellEnvIfStale } = require('./store/shell-env-state');
 const { percentageToZoomLevel } = require('@usebruno/common');
 
 if (isDev) {
@@ -51,6 +51,7 @@ const registerPluginsIpc = require('./ipc/plugins');
 const { PluginLoader } = require('./plugins/loader');
 const collectionWatcher = require('./app/collection-watcher');
 const WorkspaceWatcher = require('./app/workspace-watcher');
+const shellEnvWatcher = require('./app/shell-env-watcher');
 const ApiSpecWatcher = require('./app/apiSpecsWatcher');
 const { loadWindowState, saveBounds, saveMaximized } = require('./utils/window');
 const { preferencesUtil, getPreferences, savePreferences } = require('./store/preferences');
@@ -136,6 +137,7 @@ const closeAllWatchers = () => {
   collectionWatcher.closeAllWatchers();
   workspaceWatcher.closeAllWatchers();
   apiSpecWatcher.closeAllWatchers();
+  shellEnvWatcher.close();
 };
 
 // Parse protocol URL from command line arguments (if any)
@@ -363,6 +365,32 @@ app.on('ready', async () => {
         protocol: 'file:',
         slashes: true
       });
+
+  // Variáveis do shell são lidas UMA vez, no boot (initializeShellEnv, acima). Quem exporta um
+  // token no ~/.zshrc tinha de fechar e reabrir o app para o valor novo valer. O watcher relê o
+  // ambiente quando um arquivo de perfil muda, e como getProcessEnvVars monta o resultado a partir
+  // de `process.env` a cada requisição, a próxima chamada já usa o valor novo.
+  shellEnvWatcher.start(mainWindow);
+
+  // FOCO = "o usuário pode ter mexido em algo lá fora". Só marca; não lê nada aqui, porque ler o
+  // ambiente custa segundos e a maioria dos focos não é seguida de requisição nenhuma. Quem paga o
+  // custo é o momento do uso (ipc `renderer:shell-env-touch`, disparado ao abrir um request).
+  mainWindow.on('focus', () => markShellEnvStale());
+
+  // Disparado quando uma aba de request é aberta. Fire-and-forget de propósito: a resposta não
+  // interessa ao renderer, e prender a UI por 5s seria pior que o token velho. O aviso de que algo
+  // mudou chega depois, pelo `main:shell-env-updated`.
+  ipcMain.handle('renderer:shell-env-touch', async () => {
+    try {
+      const changed = await refreshShellEnvIfStale();
+      if (changed.length && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('main:shell-env-updated', { names: changed });
+      }
+    } catch (err) {
+      console.warn('Shell env refresh failed:', err.message);
+    }
+    return true;
+  });
 
   mainWindow.loadURL(url).catch((reason) => {
     console.error(`Error: Failed to load URL: "${url}" (Electron shows a blank screen because of this).`);
