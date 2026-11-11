@@ -1,0 +1,25 @@
+packages/bruno-app/src/components/WelcomeModal/index.js
+  s_0084dd412c3c52::t_d88f4988cbd577 110
+packages/bruno-electron/src/app/menu-template.js
+  s_0084dd412c3c52::t_128e57cede493d 99
+packages/bruno-electron/src/index.js
+  s_0084dd412c3c52::t_1d8908a1f99620 283
+packages/bruno-app/src/components/AppTitleBar/index.js
+  s_0084dd412c3c52::t_a8b2855ad7255e 321,324
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "8d31533c64aa7f0ed8e175dcbb2465c19e4d2187",
+  "prompts": {},
+  "sessions": {
+    "s_0084dd412c3c52": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3144c09d-8528-4586-9472-ee6230ca5f99",
+        "model": "moya/claude-sonnet-5"
+      },
+      "human_author": "gilmort <17356152+gilmort@users.noreply.github.com>"
+    }
+  }
+}
