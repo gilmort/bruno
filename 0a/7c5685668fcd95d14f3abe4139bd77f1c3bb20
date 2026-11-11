@@ -1,0 +1,19 @@
+Makefile
+  s_0f2c9b71b20f42::t_d134ac86279d11 39-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "0a7c5685668fcd95d14f3abe4139bd77f1c3bb20",
+  "prompts": {},
+  "sessions": {
+    "s_0f2c9b71b20f42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_0f2c9b71b20f42",
+        "model": "unknown"
+      },
+      "human_author": "gilmort <17356152+gilmort@users.noreply.github.com>"
+    }
+  }
+}
