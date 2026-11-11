@@ -10,7 +10,9 @@ import {
   updateRequestGraphqlQuery,
   updateRequestGraphqlVariables,
   updateRequestAuthMode,
-  updateAuth
+  updateAuth,
+  setFormUrlEncodedParams,
+  setMultipartFormParams
 } from 'providers/ReduxStore/slices/collections';
 import { saveRequest, cancelRequest } from 'providers/ReduxStore/slices/collections/actions';
 import { getRequestFromCurlCommand } from 'utils/curl';
@@ -23,6 +25,7 @@ import { isMacOS } from 'utils/common/platform';
 import { hasRequestChanges } from 'utils/collections';
 import StyledWrapper from './StyledWrapper';
 import GenerateCodeItem from 'components/Sidebar/Collections/Collection/CollectionItem/GenerateCodeItem/index';
+import ToolHint from 'components/ToolHint';
 import toast from 'react-hot-toast';
 
 const QueryUrl = ({ item, collection, handleRun }) => {
@@ -37,6 +40,12 @@ const QueryUrl = ({ item, collection, handleRun }) => {
 
   const [generateCodeItemModalOpen, setGenerateCodeItemModalOpen] = useState(false);
   const hasChanges = useMemo(() => hasRequestChanges(item), [item]);
+
+  useEffect(() => {
+    if (item.isTransient && !url && editorRef.current?.editor) {
+      setTimeout(() => editorRef.current?.editor?.focus(), 0);
+    }
+  }, [item.uid]);
 
   const onSave = () => {
     dispatch(saveRequest(item.uid, collection.uid));
@@ -289,13 +298,21 @@ const QueryUrl = ({ item, collection, handleRun }) => {
             );
           }
         } else if (bodyMode === 'formUrlEncoded' && request.body.formUrlEncoded) {
-          // For formUrlEncoded, we need to set each param individually
-          // This is a limitation - we'd need to clear existing params first
-          // For now, we'll set the body mode and the user can manually adjust
-          // TODO: Implement proper formUrlEncoded param setting
+          dispatch(
+            setFormUrlEncodedParams({
+              itemUid: item.uid,
+              collectionUid: collection.uid,
+              params: request.body.formUrlEncoded
+            })
+          );
         } else if (bodyMode === 'multipartForm' && request.body.multipartForm) {
-          // For multipartForm, similar limitation
-          // TODO: Implement proper multipartForm param setting
+          dispatch(
+            setMultipartFormParams({
+              itemUid: item.uid,
+              collectionUid: collection.uid,
+              params: request.body.multipartForm
+            })
+          );
         }
       }
 
@@ -391,6 +408,7 @@ const QueryUrl = ({ item, collection, handleRun }) => {
         </div>
         <div
           id="request-url"
+          data-testid="request-url"
           className="h-full w-full flex flex-row items-center input-container overflow-hidden"
         >
           <SingleLineEditor
@@ -408,35 +426,35 @@ const QueryUrl = ({ item, collection, handleRun }) => {
             showNewlineArrow={true}
           />
           <div className="flex items-center h-full mx-2 gap-3" id="request-actions">
-            <div
-              title="Generate Code"
-              className="infotip"
-              onClick={(e) => {
-                handleGenerateCode(e);
-              }}
-            >
-              <IconCode color={theme.requestTabs.icon.color} strokeWidth={1.5} size={20} className="cursor-pointer" />
-              <span className="infotiptext text-xs">Generate Code</span>
-            </div>
-            <div
-              title="Save Request"
-              className="infotip"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!hasChanges) return;
-                onSave();
-              }}
-            >
-              <IconDeviceFloppy
-                color={hasChanges ? theme.draftColor : theme.requestTabs.icon.color}
-                strokeWidth={1.5}
-                size={20}
-                className={`${hasChanges ? 'cursor-pointer' : 'cursor-default'}`}
-              />
-              <span className="infotiptext text-xs">
-                Save <span className="shortcut">({saveShortcut})</span>
-              </span>
-            </div>
+            <ToolHint text="Generate Code" toolhintId="http-generate-code" place="top" positionStrategy="fixed">
+              <div
+                className="flex items-center"
+                data-testid="generate-code-button"
+                onClick={(e) => {
+                  handleGenerateCode(e);
+                }}
+              >
+                <IconCode color={theme.requestTabs.icon.color} strokeWidth={1.5} size={20} className="cursor-pointer" />
+              </div>
+            </ToolHint>
+            <ToolHint text={`Save (${saveShortcut})`} toolhintId="http-save-request" place="top" positionStrategy="fixed">
+              <div
+                className="flex items-center"
+                data-testid="save-request-button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!hasChanges) return;
+                  onSave();
+                }}
+              >
+                <IconDeviceFloppy
+                  color={hasChanges ? theme.draftColor : theme.requestTabs.icon.color}
+                  strokeWidth={1.5}
+                  size={20}
+                  className={`${hasChanges ? 'cursor-pointer' : 'cursor-default'}`}
+                />
+              </div>
+            </ToolHint>
           </div>
         </div>
       </div>

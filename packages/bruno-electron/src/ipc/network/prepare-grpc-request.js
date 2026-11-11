@@ -1,4 +1,4 @@
-const { cloneDeep, each, get } = require('lodash');
+const { cloneDeep, get } = require('lodash');
 const interpolateVars = require('./interpolate-vars');
 const { getEnvVars, getTreePathFromCollectionToItem, mergeHeaders, mergeScripts, mergeVars, mergeAuth, getFormattedCollectionOauth2Credentials } = require('../../utils/collection');
 const { getProcessEnvVars } = require('../../store/process-env');
@@ -6,6 +6,7 @@ const { getOAuth2TokenUsingPasswordCredentials, getOAuth2TokenUsingClientCredent
 const { setAuthHeaders } = require('./prepare-request');
 const { getCertsAndProxyConfig } = require('./cert-utils');
 const { interpolateString } = require('./interpolate-string');
+const { buildHeaderEntries } = require('@usebruno/js');
 
 const processHeaders = (headers) => {
   Object.entries(headers).forEach(([key, value]) => {
@@ -13,6 +14,16 @@ const processHeaders = (headers) => {
       headers[key] = Buffer.from(value, 'base64');
     }
   });
+};
+
+const resolveAuthMode = (request, collectionRoot) => {
+  const mode = get(request, 'auth.mode', 'none');
+
+  if (mode !== 'inherit') {
+    return mode;
+  }
+
+  return get(collectionRoot, 'request.auth.mode', 'none');
 };
 
 const placeOAuth2Token = (grpcRequest, credentials, tokenPlacement, tokenHeaderPrefix, tokenQueryKey) => {
@@ -117,10 +128,15 @@ const configureRequest = async (grpcRequest, request, collection, envVars, runti
   }
 };
 
-const prepareGrpcRequest = async (item, collection, environment, runtimeVariables) => {
+/**
+ * Assembles the outgoing gRPC request without interpolating it.
+ *
+ * Interpolation is deliberately left to `interpolateGrpcRequest` so a `beforeCallStart` hook can
+ * run in between
+ */
+const buildGrpcRequest = async (item, collection, environment, runtimeVariables) => {
   const request = item.draft ? item.draft.request : item.request;
   const collectionRoot = collection?.draft?.root ? get(collection, 'draft.root', {}) : get(collection, 'root', {});
-  const headers = {};
   const url = request.url;
   const { promptVariables = {} } = collection;
 
@@ -136,28 +152,29 @@ const prepareGrpcRequest = async (item, collection, environment, runtimeVariable
     request.promptVariables = promptVariables;
   }
 
-  each(get(request, 'headers', []), (h) => {
-    if (h.enabled && h.name.length > 0) {
-      headers[h.name] = h.value;
-    }
-  });
+  const { headers, headerEntries } = buildHeaderEntries(get(request, 'headers', []).filter((h) => h.enabled));
 
   const processEnvVars = getProcessEnvVars(collection.uid);
   const envVars = getEnvVars(environment);
 
   let grpcRequest = {
     uid: item.uid,
+    name: item.name,
+    pathname: item.pathname,
     mode: request.body.mode,
     method: request.method,
     methodType: request.methodType,
     url,
     headers,
+    headerEntries,
+    authMode: resolveAuthMode(request, collectionRoot),
     processEnvVars,
     envVars,
     runtimeVariables,
     promptVariables,
     body: request.body,
     protoPath: request.protoPath,
+    script: request.script,
     // Add variable properties for interpolation
     vars: request.vars,
     collectionVariables: request.collectionVariables,
@@ -169,11 +186,22 @@ const prepareGrpcRequest = async (item, collection, environment, runtimeVariable
 
   grpcRequest = setAuthHeaders(grpcRequest, request, collectionRoot);
 
+  return grpcRequest;
+};
+
+const interpolateGrpcRequest = (grpcRequest) => {
+  const { envVars, runtimeVariables, processEnvVars, promptVariables } = grpcRequest;
+
   interpolateVars(grpcRequest, envVars, runtimeVariables, processEnvVars, promptVariables);
   processHeaders(grpcRequest.headers);
 
   return grpcRequest;
 };
 
+const prepareGrpcRequest = async (item, collection, environment, runtimeVariables) =>
+  interpolateGrpcRequest(await buildGrpcRequest(item, collection, environment, runtimeVariables));
+
 module.exports = prepareGrpcRequest;
 module.exports.configureRequest = configureRequest;
+module.exports.buildGrpcRequest = buildGrpcRequest;
+module.exports.interpolateGrpcRequest = interpolateGrpcRequest;

@@ -12,14 +12,19 @@ import workspacesReducer from './slices/workspaces';
 import apiSpecReducer from './slices/apiSpec';
 import openapiSyncReducer from './slices/openapi-sync';
 import pluginsReducer from './slices/plugins';
+import mockServerReducer from './slices/mock-server/index';
+import chatReducer from './slices/chat';
+import collectionMigrationReducer from './slices/collection-migration';
 import { draftDetectMiddleware } from './middlewares/draft/middleware';
 import { autosaveMiddleware } from './middlewares/autosave/middleware';
+import { snapshotMiddleware } from './middlewares/snapshot/middleware';
+import { benchmarkMiddleware } from './middlewares/benchmark/middleware';
 
 const isDevEnv = () => {
   return import.meta.env.MODE === 'development';
 };
 
-let middleware = [tasksMiddleware.middleware, draftDetectMiddleware, autosaveMiddleware];
+let middleware = [tasksMiddleware.middleware, draftDetectMiddleware, autosaveMiddleware, snapshotMiddleware];
 if (isDevEnv()) {
   middleware = [...middleware, debugMiddleware.middleware];
 }
@@ -36,9 +41,15 @@ export const store = configureStore({
     workspaces: workspacesReducer,
     apiSpec: apiSpecReducer,
     openapiSync: openapiSyncReducer,
-    plugins: pluginsReducer
+    plugins: pluginsReducer,
+    mockServer: mockServerReducer,
+    chat: chatReducer,
+    collectionMigration: collectionMigrationReducer
   },
-  middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(middleware)
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware()
+      .prepend(...(__BRUNO_BENCHMARK__ ? [benchmarkMiddleware] : []))
+      .concat(middleware)
 });
 
 export default store;

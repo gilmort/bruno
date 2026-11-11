@@ -11,7 +11,7 @@ const template = [
       {
         label: 'Open Collection',
         click() {
-          ipcMain.emit('main:open-collection');
+          ipcMain.emit('menu:open-collection');
         }
       },
       {
@@ -102,7 +102,7 @@ const template = [
             width: 350,
             height: 250,
             webPreferences: {
-              nodeIntegration: true
+              nodeIntegration: false
             }
           });
           aboutWindow.removeMenu();

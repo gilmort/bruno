@@ -54,7 +54,9 @@ const MaskedBadge = ({ label, originalValue }) => {
   );
 };
 
-const JsonPreview = ({ data, displayedTheme }) => {
+import { isHttpUrl } from 'utils/url';
+
+const JsonPreview = ({ data, displayedTheme, onLinkClick }) => {
   const labelsHidden = useSelector((state) => state.plugins.labelsHidden);
   // Plugins (ex.: json-response-labels) só decoram o CodeMirror via registerEditorDecorator,
   // que não cobre esta árvore do react-json-view. registerValueMasker fecha essa lacuna.
@@ -105,6 +107,14 @@ const JsonPreview = ({ data, displayedTheme }) => {
     return <ErrorBanner errors={[{ title: 'Cannot preview as JSON', message: 'Data cannot be rendered as a JSON tree. Expected a JSON object or array.' }]} />;
   }
 
+  const handleSelect = (selection) => {
+    if (typeof onLinkClick !== 'function' || !isHttpUrl(selection?.value)) {
+      return;
+    }
+
+    onLinkClick(selection.value.trim());
+  };
+
   return (
     <ReactJson
       src={jsonData.data}
@@ -113,6 +123,7 @@ const JsonPreview = ({ data, displayedTheme }) => {
       displayDataTypes={false}
       displayObjectSize={true}
       enableClipboard={true}
+      onSelect={handleSelect}
       name={false}
       valueRenderer={valueRenderer}
       style={{

@@ -5,23 +5,30 @@ const terser = require('@rollup/plugin-terser').default;
 const peerDepsExternal = require('rollup-plugin-peer-deps-external');
 const { copy } = require('@web/rollup-plugin-copy');
 const path = require('path');
+const os = require('os');
 
 const packageJson = require('./package.json');
 
 const externalDeps = [
+  '@usebruno/common',
+  '@usebruno/common/utils',
   '@usebruno/schema',
   '@usebruno/schema-types',
   /@usebruno\/schema-types\/.*/,
   '@opencollection/types',
   /@opencollection\/types\/.*/,
   // Runtime dependencies
+  '@babel/parser',
   'lodash',
   'lodash/each',
   'lodash/get',
   'lodash/cloneDeep',
   'lodash/map',
+  'lodash/isPlainObject',
   'js-yaml',
   'jscodeshift',
+  'markdown-it',
+  'mime-types',
   'nanoid',
   'xml2js',
   // Node built-ins
@@ -50,7 +57,9 @@ module.exports = [
         sourceMap: true,
         outDir: path.dirname(packageJson.main)
       }),
-      terser(),
+      terser({
+        maxWorkers: Math.max(1, os.availableParallelism())
+      }),
       copy({
         patterns: 'src/workers/scripts/**/*',
         rootDir: '.'
@@ -78,7 +87,9 @@ module.exports = [
         sourceMap: true,
         outDir: path.dirname(packageJson.module)
       }),
-      terser(),
+      terser({
+        maxWorkers: Math.max(1, os.availableParallelism())
+      }),
       copy({
         patterns: 'src/workers/scripts/**/*',
         rootDir: '.'

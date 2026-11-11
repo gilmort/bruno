@@ -104,7 +104,8 @@ const QueryResult = ({
   onFilterChange,
   onFilterExpandChange,
   getMask,
-  maskEnabled
+  maskEnabled,
+  docKey
 }) => {
   const contentType = getContentType(headers);
   const [showLargeResponse, setShowLargeResponse] = useState(false);
@@ -219,6 +220,7 @@ const QueryResult = ({
                 displayedTheme={displayedTheme}
                 getMask={getMask}
                 maskEnabled={maskEnabled}
+                docKey={docKey}
               />
             </div>
             {queryFilterEnabled && (

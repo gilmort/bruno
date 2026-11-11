@@ -18,6 +18,11 @@ let _refreshing = false;
 let _lastReadAt = 0;
 
 const _initWithTimeout = () => {
+  // @TODO: Temp skip during Playwright tests - otherwise it can hang on macOS CI
+  if (process.env.PLAYWRIGHT) {
+    return Promise.resolve();
+  }
+
   let timer;
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(() => {
