@@ -36,6 +36,11 @@ web: deps ## Builda o frontend (bruno-app) e copia pra packages/bruno-electron/w
 	rm -rf packages/bruno-electron/web
 	mkdir packages/bruno-electron/web
 	cp -r packages/bruno-app/dist/* packages/bruno-electron/web
+	# Paths /static/... são absolutos e em file:// resolvem pra raiz do disco, não pro .app —
+	# sem isto o JS/CSS dá 404 silencioso, o React nunca monta e a janela fica preta (sem
+	# nenhum erro visível fora do DevTools). scripts/build-electron.sh faz o mesmo sed.
+	sed -i '' -e 's@/static/@static/@g' packages/bruno-electron/web/*.html
+	sed -i '' -e 's@/static/font@../../static/font@g' packages/bruno-electron/web/static/css/*.*.css
 	find packages/bruno-electron/web -name '*.map' -type f -delete
 
 electron: web ## Rebuilda o web e empacota o .app da arquitetura nativa (sem dmg/pkg/zip)
