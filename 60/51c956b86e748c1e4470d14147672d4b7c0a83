@@ -1,0 +1,23 @@
+packages/bruno-app/src/components/Bruno/index.js
+  s_ef0e94ed2f3c27::t_e84725f0be4f0a 8
+packages/bruno-common/src/runner/reports/html/template.ts
+  s_ef0e94ed2f3c27::t_a00280efc711d6 93
+packages/bruno-electron/src/app/about-bruno.js
+  s_ef0e94ed2f3c27::t_d5e9a7847db6b9 64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "6051c956b86e748c1e4470d14147672d4b7c0a83",
+  "prompts": {},
+  "sessions": {
+    "s_ef0e94ed2f3c27": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_ef0e94ed2f3c27",
+        "model": "unknown"
+      },
+      "human_author": "gilmort <17356152+gilmort@users.noreply.github.com>"
+    }
+  }
+}
