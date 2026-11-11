@@ -1,0 +1,19 @@
+.gitignore
+  s_02f885c97e6dd0::t_612b8036231439 78-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "582feae635fcced35ff7141922fde02111ebc10f",
+  "prompts": {},
+  "sessions": {
+    "s_02f885c97e6dd0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_02f885c97e6dd0",
+        "model": "unknown"
+      },
+      "human_author": "gilmort <17356152+gilmort@users.noreply.github.com>"
+    }
+  }
+}
