@@ -1,3 +1,20 @@
+import type { T_RunnerRequestExecutionResult } from '../../types';
+
+export const getFilteredRequestResults = (results: T_RunnerRequestExecutionResult[] = [], onlyFailed = false) => {
+  const indexedResults = (Array.isArray(results) ? results : []).map((value, index) => ({ value, index }));
+
+  if (!onlyFailed) {
+    return indexedResults;
+  }
+
+  return indexedResults.filter(
+    ({ value }) =>
+      value?.status === 'error'
+      || !!value?.testResults?.find((t) => t.status !== 'pass')
+      || !!value?.assertionResults?.find((t) => t.status !== 'pass')
+  );
+};
+
 export const htmlTemplateString = (resutsJsonString: string) => `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -73,7 +90,7 @@ export const htmlTemplateString = (resutsJsonString: string) => `<!DOCTYPE html>
                     <svg id="emoji" width="34" viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg">
                       <g id="color">
                         <path
-                          fill="#F4AA41"
+                          fill="#5A5A5A"
                           stroke="none"
                           d="M23.5,14.5855l-4.5,1.75l-7.25,8.5l-4.5,10.75l2,5.25c1.2554,3.7911,3.5231,7.1832,7.25,10l2.5-3.3333 c0,0,3.8218,7.7098,10.7384,8.9598c0,0,10.2616,1.936,15.5949-0.8765c3.4203-1.8037,4.4167-4.4167,4.4167-4.4167l3.4167-3.4167 l1.5833,2.3333l2.0833-0.0833l5.4167-7.25L64,37.3355l-0.1667-4.5l-2.3333-5.5l-4.8333-7.4167c0,0-2.6667-4.9167-8.1667-3.9167 c0,0-6.5-4.8333-11.8333-4.0833S32.0833,10.6688,23.5,14.5855z"
                         ></path>
@@ -294,7 +311,7 @@ export const htmlTemplateString = (resutsJsonString: string) => `<!DOCTYPE html>
           </n-switch>
 
           <n-collapse>
-            <x-result v-for="(result, index) in results" :result="result" :index="index" :key="index"></x-result>
+            <x-result v-for="result in results" :result="result.value" :index="result.index" :key="result.index"></x-result>
           </n-collapse>
         </n-flex>
       </n-card>
@@ -310,7 +327,7 @@ export const htmlTemplateString = (resutsJsonString: string) => `<!DOCTYPE html>
             :bordered="false"
           >
             <template #header>
-              {{result.path}} - {{result.response.status === 'skipped' ? 'Request Skipped' : (totalPassed + '/' + total + ' Passed')}} {{hasError && result.response.status !== 'skipped' ? " - (request failed)" : "" }}
+              {{result.path}} - {{resultSummary}} {{hasError && result.response.status !== 'skipped' ? " - (request failed)" : "" }}
             </template>
           </n-alert>
         </template>
@@ -346,7 +363,7 @@ export const htmlTemplateString = (resutsJsonString: string) => `<!DOCTYPE html>
                   <n-list-item>
                     <n-thing
                       title="Response Code"
-                      :description="'' + result.response.status"
+                      :description="responseCode"
                     />
                   </n-list-item>
                   <n-list-item>
@@ -422,6 +439,8 @@ export const htmlTemplateString = (resutsJsonString: string) => `<!DOCTYPE html>
     </script>
     <script>
       const { createApp, ref, computed, onMounted } = Vue;
+
+      const getFilteredRequestResults = ${getFilteredRequestResults.toString()};
 
       function mergeTests(runnerResults) {
         if (!Array.isArray(runnerResults)) return runnerResults; 
@@ -645,15 +664,7 @@ export const htmlTemplateString = (resutsJsonString: string) => `<!DOCTYPE html>
         setup(props) {
           const onlyFailed = ref(false);
           const filteredResults = computed(() => {
-            if (onlyFailed.value) {
-              return props?.res?.results?.filter(
-                (r) =>
-                  r.status === 'error' ||
-                  !!r?.testResults?.find((t) => t.status !== 'pass') ||
-                  !!r?.assertionResults?.find((t) => t.status !== 'pass')
-              );
-            }
-            return props.res.results;
+            return getFilteredRequestResults(props?.res?.results, onlyFailed.value);
           });
           const iterationIndex = Number(props.res.iterationIndex) + 1;
           return {
@@ -761,6 +772,18 @@ export const htmlTemplateString = (resutsJsonString: string) => `<!DOCTYPE html>
           const hasFailure = computed(() => total.value !== totalPassed.value);
           const testDuration = computed(() => Math.round(props?.result?.runDuration * 1000) + ' ms');
           const resultTitle = computed(() => props?.result?.path + ' ' + props?.result?.response?.status + ' ' + props?.result?.response?.statusText + ' ' + props?.index);
+          const responseCode = computed(() => {
+            if (props.result.response.status === 'skipped') {
+              return '-';
+            }
+            return '' + props.result.response.status;
+          });
+          const resultSummary = computed(() => {
+            if (props.result.response.status === 'skipped') {
+              return props.result.skipReason === 'bail' ? 'Request skipped due to bail' : 'Request Skipped';
+            }
+            return totalPassed.value + '/' + total.value + ' Passed';
+          });
           const getAlertType = computed(() => {
             if (props.result.response.status === 'skipped') {
               return 'warning';
@@ -781,7 +804,9 @@ export const htmlTemplateString = (resutsJsonString: string) => `<!DOCTYPE html>
             testsColumns,
             result: props.result,
             testDuration,
+            responseCode,
             resultTitle,
+            resultSummary,
             getAlertType,
             iterationIndex: props?.result?.iterationIndex
           };

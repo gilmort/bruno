@@ -9,6 +9,8 @@ import { toBrunoPostResponseVariables } from '../common/actions';
 import { toBrunoScripts } from '../common/scripts';
 import { toBrunoAssertions } from '../common/assertions';
 import { uuid, ensureString } from '../../../utils';
+import { utils } from '@usebruno/common';
+const { toBool, toMaxRedirects } = utils;
 
 const parseGraphQLRequest = (ocRequest: GraphQLRequest): BrunoItem => {
   const info = ocRequest.info;
@@ -98,15 +100,19 @@ const parseGraphQLRequest = (ocRequest: GraphQLRequest): BrunoItem => {
     pathname: null
   };
 
+  // description
+  if (info?.description) {
+    const desc = typeof info.description === 'string' ? info.description : (info.description as any)?.content || '';
+    if (desc.trim().length) {
+      brunoItem.description = desc;
+    }
+  }
+
   // settings
   if (ocRequest.settings) {
     const settings: BrunoHttpItemSettings = {};
 
-    if (typeof ocRequest.settings.encodeUrl === 'boolean') {
-      settings.encodeUrl = ocRequest.settings.encodeUrl;
-    } else {
-      settings.encodeUrl = true;
-    }
+    settings.encodeUrl = toBool(ocRequest.settings.encodeUrl, true);
 
     if (typeof ocRequest.settings.timeout === 'number') {
       settings.timeout = ocRequest.settings.timeout;
@@ -116,19 +122,20 @@ const parseGraphQLRequest = (ocRequest: GraphQLRequest): BrunoItem => {
       settings.timeout = 0;
     }
 
-    if (typeof ocRequest.settings.followRedirects === 'boolean') {
-      settings.followRedirects = ocRequest.settings.followRedirects;
-    } else {
-      settings.followRedirects = true;
-    }
-
-    if (typeof ocRequest.settings.maxRedirects === 'number') {
-      settings.maxRedirects = ocRequest.settings.maxRedirects;
-    } else {
-      settings.maxRedirects = 5;
-    }
+    settings.followRedirects = toBool(ocRequest.settings.followRedirects, true);
+    settings.maxRedirects = toMaxRedirects(ocRequest.settings.maxRedirects);
+    settings.forwardAuthorizationHeader = toBool(ocRequest.settings.forwardAuthorizationHeader, true);
 
     brunoItem.settings = settings;
+
+    // Chaves de settings de plugins (plugins) — passthrough genérico.
+    const settingsAny = ocRequest.settings as any;
+    const knownKeys = new Set(['encodeUrl', 'timeout', 'followRedirects', 'maxRedirects', 'keepAliveInterval']);
+    Object.keys(settingsAny).forEach((key) => {
+      if (knownKeys.has(key)) return;
+      const val = settingsAny[key];
+      if (val && typeof val === 'object') (brunoItem.settings as any)[key] = val;
+    });
   }
 
   return brunoItem;

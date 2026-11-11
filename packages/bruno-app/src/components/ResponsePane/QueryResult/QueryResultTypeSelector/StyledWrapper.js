@@ -7,9 +7,12 @@ const StyledWrapper = styled.div`
   }
 
   .button-dropdown-button {
-    color: ${(props) => props.theme.text};
-    border-color: ${(props) => props.theme.workspace.border};
-
+    /* look plano igual ao seletor de body do request: sem borda/fundo, texto primário */
+    color: ${(props) => props.theme.primary.text};
+    border-color: transparent !important;
+    background: transparent !important;
+    padding-left: 0.75rem;
+    padding-right: 0.25rem;
   }
 
   .dropdown-divider {

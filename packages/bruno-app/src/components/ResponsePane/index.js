@@ -1,7 +1,12 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useCallback } from 'react';
 import find from 'lodash/find';
+import get from 'lodash/get';
+import classnames from 'classnames';
 import { useDispatch, useSelector } from 'react-redux';
+import { IconEye, IconEyeOff } from '@tabler/icons';
 import { updateResponsePaneTab, updateResponseFormat, updateResponseViewTab, updateResponseFilter, updateResponseFilterExpanded } from 'providers/ReduxStore/slices/tabs';
+import { setLabelsHidden } from 'providers/ReduxStore/slices/plugins';
+import { pluginValueMaskers } from 'utils/plugins/registry';
 import QueryResult from './QueryResult';
 import Overlay from './Overlay';
 import Placeholder from './Placeholder';
@@ -12,8 +17,8 @@ import ResponseSize from './ResponseSize';
 import Timeline from './Timeline';
 import TestResults from './TestResults';
 import TestResultsLabel from './TestResultsLabel';
-import ScriptError from './ScriptError';
-import ScriptErrorIcon from './ScriptErrorIcon';
+import ResponseAlertsSection from './ResponseAlertsSection';
+import ResponseErrorsIcon from './ResponseErrorsIcon';
 import StyledWrapper from './StyledWrapper';
 import ResponsePaneActions from './ResponsePaneActions';
 import QueryResultTypeSelector from './QueryResult/QueryResultTypeSelector/index';
@@ -24,6 +29,8 @@ import HeightBoundContainer from 'ui/HeightBoundContainer';
 import ResponseStopWatch from 'components/ResponsePane/ResponseStopWatch';
 import WSMessagesList from './WsResponsePane/WSMessagesList';
 import ResponsiveTabs from 'ui/ResponsiveTabs';
+import { useSetAsVariable } from 'providers/SetAsVariable/context';
+import useResponsePaneErrors from 'hooks/useResponsePaneErrors';
 
 // Width threshold for expanded right-side action buttons
 const RIGHT_CONTENT_EXPANDED_WIDTH = 135;
@@ -32,9 +39,10 @@ const ResponsePane = ({ item, collection }) => {
   const dispatch = useDispatch();
   const tabs = useSelector((state) => state.tabs.tabs);
   const activeTabUid = useSelector((state) => state.tabs.activeTabUid);
+  const labelsHidden = useSelector((state) => state.plugins.labelsHidden);
   const isLoading = ['queued', 'sending'].includes(item.requestState);
-  const [showScriptErrorCard, setShowScriptErrorCard] = useState(false);
   const rightContentRef = useRef(null);
+  const setAsVariable = useSetAsVariable();
 
   const response = item.response || {};
 
@@ -85,12 +93,6 @@ const ResponsePane = ({ item, collection }) => {
     if (obj.itemUid === item.uid) return true;
   });
 
-  useEffect(() => {
-    if (item?.preRequestScriptErrorMessage || item?.postResponseScriptErrorMessage || item?.testScriptErrorMessage) {
-      setShowScriptErrorCard(true);
-    }
-  }, [item?.preRequestScriptErrorMessage, item?.postResponseScriptErrorMessage, item?.testScriptErrorMessage]);
-
   const selectTab = (tab) => {
     dispatch(
       updateResponsePaneTab({
@@ -99,6 +101,12 @@ const ResponsePane = ({ item, collection }) => {
       })
     );
   };
+
+  const isResponseTabActive = focusedTab?.responsePaneTab === 'response';
+  const responsePaneErrors = useResponsePaneErrors(item, collection, {
+    isResponseTabActive,
+    showResponseTab: () => selectTab('response')
+  });
   const responseSize = useMemo(() => {
     if (typeof response.size === 'number') {
       return response.size;
@@ -115,8 +123,6 @@ const ResponsePane = ({ item, collection }) => {
     }
   }, [response.size, response.dataBuffer]);
   const responseHeadersCount = typeof response.headers === 'object' ? Object.entries(response.headers).length : 0;
-
-  const hasScriptError = item?.preRequestScriptErrorMessage || item?.postResponseScriptErrorMessage || item?.testScriptErrorMessage;
 
   const allTabs = useMemo(() => {
     return [
@@ -155,7 +161,7 @@ const ResponsePane = ({ item, collection }) => {
       case 'response': {
         const isStream = item.response?.stream ?? false;
         if (isStream) {
-          return <WSMessagesList order={-1} messages={item.response.data} />;
+          return <WSMessagesList order={-1} messages={item.response.data} item={item} collection={collection} />;
         }
         return (
           <QueryResult
@@ -184,6 +190,7 @@ const ResponsePane = ({ item, collection }) => {
       case 'tests': {
         return (
           <TestResults
+            item={item}
             results={item.testResults}
             assertionResults={item.assertionResults}
             preRequestTestResults={item.preRequestTestResults}
@@ -230,18 +237,41 @@ const ResponsePane = ({ item, collection }) => {
     return <div className="pb-4 px-4">An error occurred!</div>;
   }
 
+  const alertsSection = !isLoading && isResponseTabActive ? (
+    <ResponseAlertsSection item={item} collection={collection} responsePaneErrors={responsePaneErrors} />
+  ) : null;
+
+  const errorsIcon = responsePaneErrors.isCardClosed ? (
+    <ResponseErrorsIcon count={responsePaneErrors.errors.length} onClick={responsePaneErrors.reopenCard} />
+  ) : null;
+
   const rightContent = !isLoading ? (
     <div ref={rightContentRef} className="flex justify-end items-center right-side-container gap-3">
-      {hasScriptError && !showScriptErrorCard && (
-        <ScriptErrorIcon
-          itemUid={item.uid}
-          onClick={() => setShowScriptErrorCard(true)}
-        />
-      )}
-      {focusedTab?.responsePaneTab === 'response' && item?.response && !(item.response?.stream ?? false) ? (
+      {errorsIcon}
+      {isResponseTabActive && item?.response && !(item.response?.stream ?? false) ? (
         <>
           {/* Result View Tabs (Visualizations + Response Format) */}
           <div className="result-view-tabs">
+
+            {/* Toggle de labels (request + response), ao lado do seletor de formato.
+                Só quando há masker ativo e o formato é JSON. Roxo sutil quando ativo. */}
+            {selectedFormat === 'json' && pluginValueMaskers.count() > 0 && (
+              <button
+                type="button"
+                className="flex items-center gap-0.5 h-[16px] rounded border px-1 text-[11px] leading-none cursor-pointer select-none transition-colors"
+                style={
+                  labelsHidden
+                    ? { borderColor: 'rgba(127,127,127,.28)' }
+                    : { borderColor: 'rgba(142,68,173,.55)', backgroundColor: 'rgba(142,68,173,.14)', color: '#8e44ad' }
+                }
+                title={labelsHidden ? 'Show labels' : 'Hide labels'}
+                aria-label={labelsHidden ? 'Show labels' : 'Hide labels'}
+                onClick={() => dispatch(setLabelsHidden(!labelsHidden))}
+              >
+                {labelsHidden ? <IconEyeOff size={11} strokeWidth={1.5} /> : <IconEye size={11} strokeWidth={1.5} />}
+                <span>labels</span>
+              </button>
+            )}
 
             {/* Response Format */}
             <QueryResultTypeSelector
@@ -258,10 +288,10 @@ const ResponsePane = ({ item, collection }) => {
           </div>
         </>
       ) : null}
-      <div className="flex items-center response-pane-status">
+      <div className="flex items-center response-pane-status" data-testid="response-pane-status">
         <StatusCode status={response.status} isStreaming={item.response?.stream?.running} />
         {item.response?.stream?.running
-          ? <ResponseStopWatch startMillis={response.duration} />
+          ? <ResponseStopWatch startTimestamp={item.requestSent?.timestamp} />
           : <ResponseTime duration={response.duration} />}
         <ResponseSize size={responseSize} />
       </div>
@@ -281,6 +311,7 @@ const ResponsePane = ({ item, collection }) => {
           />
         ) : null}
       </div>
+
     </div>
   ) : null;
 
@@ -296,22 +327,14 @@ const ResponsePane = ({ item, collection }) => {
           rightContentExpandedWidth={RIGHT_CONTENT_EXPANDED_WIDTH}
         />
       </div>
-      <section
-        className="flex flex-col min-h-0 relative px-4 auto overflow-auto mt-4"
-        style={{
-          flex: '1 1 0',
-          height: hasScriptError && showScriptErrorCard ? 'auto' : '100%'
-        }}
-      >
+      <section className="response-pane-content">
         {isLoading ? <Overlay item={item} collection={collection} /> : null}
-        {hasScriptError && showScriptErrorCard && (
-          <ScriptError
-            item={item}
-            onClose={() => setShowScriptErrorCard(false)}
-            collection={collection}
-          />
-        )}
-        <div className="flex-1 overflow-y-auto">
+        {alertsSection}
+        <div
+          className={classnames('response-tab-content', { hidden: responsePaneErrors.isCardFullPane })}
+          data-testid="response-tab-content"
+          onContextMenu={(event) => setAsVariable.openFromDomSelection(event, { collection, item })}
+        >
           {!item?.response ? (
             focusedTab?.responsePaneTab === 'timeline' && requestTimeline?.length ? (
               <Timeline

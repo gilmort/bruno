@@ -34,13 +34,16 @@ test.describe('All Collection Types Bulk Import', () => {
     await expect(bulkImportModal.locator('.bruno-modal-header-title')).toContainText('Bulk Import');
 
     // Check that the Collections count shows 4 collections in the Bulk Import modal
-    await expect(bulkImportModal.getByText('Collections (4)')).toBeVisible();
+    const collectionsHeading = bulkImportModal.getByTestId('selection-heading').filter({ hasText: 'Collections' });
+    await expect(collectionsHeading).toBeVisible();
+    await expect(collectionsHeading.getByTestId('selection-count')).toHaveText('4');
     await expect(bulkImportModal.getByText('Sample Postman Collection')).toBeVisible();
     await expect(bulkImportModal.getByText('Sample Insomnia Collection')).toBeVisible();
     await expect(bulkImportModal.getByText('Sample Bruno Collection')).toBeVisible();
     await expect(bulkImportModal.getByText('Sample API')).toBeVisible();
 
-    // Verify that OpenAPI settings are visible (since one file is OpenAPI)
+    // Open the OpenAPI Import configuration (one file is OpenAPI) and verify Folder arrangement is there
+    await bulkImportModal.getByRole('button', { name: 'OpenAPI Import configuration' }).click();
     await expect(bulkImportModal.getByText('Folder arrangement')).toBeVisible();
     await expect(bulkImportModal.getByTestId('grouping-dropdown')).toBeVisible();
 
@@ -50,7 +53,7 @@ test.describe('All Collection Types Bulk Import', () => {
 
     // Select a location and import
     await page.locator('#collection-location').fill(await createTmpDir('all-collection-types-test'));
-    await bulkImportModal.getByRole('button', { name: 'Import' }).click();
+    await bulkImportModal.getByRole('button', { name: 'Import', exact: true }).click();
 
     // Wait for import to complete (summary modal shows with "Close" button)
     await expect(bulkImportModal.getByRole('button', { name: 'Close' })).toBeVisible();

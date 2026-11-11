@@ -1,7 +1,7 @@
 import React, { useRef, useCallback, useMemo } from 'react';
 import classnames from 'classnames';
 import { useSelector, useDispatch } from 'react-redux';
-import { find, get } from 'lodash';
+import { find, get, isEqual } from 'lodash';
 import { updateRequestPaneTab } from 'providers/ReduxStore/slices/tabs';
 import QueryParams from 'components/RequestPane/QueryParams';
 import RequestHeaders from 'components/RequestPane/RequestHeaders';
@@ -13,11 +13,16 @@ import Assertions from 'components/RequestPane/Assertions';
 import Script from 'components/RequestPane/Script';
 import Tests from 'components/RequestPane/Tests';
 import Settings from 'components/RequestPane/Settings';
+import AppCodeEditor from 'components/RequestPane/AppCodeEditor';
 import Documentation from 'components/Documentation/index';
+import DocsAction from 'components/Documentation/DocsAction';
 import StatusDot from 'components/StatusDot';
 import ResponsiveTabs from 'ui/ResponsiveTabs';
 import HeightBoundContainer from 'ui/HeightBoundContainer';
 import AuthMode from '../Auth/AuthMode/index';
+import { pluginRequestTabRegistry } from 'utils/plugins/registry';
+import TabBarAiAssist from '../TabBarAiAssist';
+import { hasEffectiveAuth } from 'utils/auth';
 
 const TAB_CONFIG = [
   { key: 'params', label: 'Params' },
@@ -29,8 +34,21 @@ const TAB_CONFIG = [
   { key: 'assert', label: 'Assert' },
   { key: 'tests', label: 'Tests' },
   { key: 'docs', label: 'Docs' },
+  { key: 'app', label: 'App' },
   { key: 'settings', label: 'Settings' }
 ];
+
+// Config de plugin tem "conteúdo" se, ignorando chaves __internas e objetos vazios,
+// ainda sobra algo. Ex.: { __enabled:true, request:{}, response:{ id:{...} } } → true.
+const hasMeaningfulData = (v) => {
+  if (v == null) return false;
+  if (Array.isArray(v)) return v.length > 0;
+  if (typeof v === 'object') {
+    return Object.keys(v).some((k) => !k.startsWith('__') && hasMeaningfulData(v[k]));
+  }
+  if (typeof v === 'string') return v.length > 0;
+  return true;
+};
 
 const TAB_PANELS = {
   params: QueryParams,
@@ -42,6 +60,7 @@ const TAB_PANELS = {
   script: Script,
   tests: Tests,
   docs: Documentation,
+  app: AppCodeEditor,
   settings: Settings
 };
 
@@ -49,14 +68,14 @@ const HttpRequestPane = ({ item, collection }) => {
   const dispatch = useDispatch();
   const tabs = useSelector((state) => state.tabs.tabs);
   const activeTabUid = useSelector((state) => state.tabs.activeTabUid);
+  const pluginRequestTabs = useSelector((state) => state.plugins.requestTabs);
 
   const rightContentRef = useRef(null);
 
   const focusedTab = find(tabs, (t) => t.uid === activeTabUid);
   const requestPaneTab = focusedTab?.requestPaneTab;
-
   const getProperty = useCallback(
-    (key) => (item.draft ? get(item, `draft.${key}`, []) : get(item, key, [])),
+    (key, defaultValue = []) => (item.draft ? get(item, `draft.${key}`, defaultValue) : get(item, key, defaultValue)),
     [item.draft, item]
   );
 
@@ -71,6 +90,10 @@ const HttpRequestPane = ({ item, collection }) => {
   const responseVars = getProperty('request.vars.res');
   const auth = getProperty('request.auth');
   const tags = getProperty('tags');
+  const app = getProperty('app', null);
+  const appTabEnabled = app?.enabled === true;
+  // A previously selected App tab may be restored while apps are disabled in settings.
+  const effectiveTab = requestPaneTab === 'app' && !appTabEnabled ? 'params' : requestPaneTab;
 
   const activeCounts = useMemo(() => ({
     params: params.filter((p) => p.enabled).length,
@@ -86,6 +109,12 @@ const HttpRequestPane = ({ item, collection }) => {
     [dispatch, item.uid]
   );
 
+  const itemAuthMode = item.draft?.request?.auth?.mode ?? item.request?.auth?.mode ?? item.root?.request?.auth?.mode;
+  const hasAuth = useMemo(
+    () => hasEffectiveAuth(collection, item),
+    [item, itemAuthMode, collection]
+  );
+
   const indicators = useMemo(() => {
     const hasScriptError = item.preRequestScriptErrorMessage || item.postResponseScriptErrorMessage;
     const hasTestError = item.testScriptErrorMessage;
@@ -94,45 +123,81 @@ const HttpRequestPane = ({ item, collection }) => {
       params: activeCounts.params > 0 ? <sup className="font-medium">{activeCounts.params}</sup> : null,
       body: body.mode !== 'none' ? <StatusDot /> : null,
       headers: activeCounts.headers > 0 ? <sup className="font-medium">{activeCounts.headers}</sup> : null,
-      auth: auth.mode !== 'none' ? <StatusDot /> : null,
+      auth: hasAuth ? <StatusDot dataTestId="auth" /> : null,
       vars: activeCounts.vars > 0 ? <sup className="font-medium">{activeCounts.vars}</sup> : null,
       script: (script.req || script.res) ? (hasScriptError ? <StatusDot type="error" /> : <StatusDot />) : null,
       assert: activeCounts.assertions > 0 ? <sup className="font-medium">{activeCounts.assertions}</sup> : null,
       tests: tests?.length > 0 ? (hasTestError ? <StatusDot type="error" /> : <StatusDot />) : null,
       docs: docs?.length > 0 ? <StatusDot /> : null,
+      app: app?.code?.length > 0 ? <StatusDot dataTestId="app" /> : null,
       settings: tags?.length > 0 ? <StatusDot /> : null
     };
-  }, [activeCounts, body.mode, auth.mode, script, item.preRequestScriptErrorMessage, item.postResponseScriptErrorMessage, item.testScriptErrorMessage, tests, docs, tags]);
+  }, [activeCounts, body.mode, hasAuth, script, item.preRequestScriptErrorMessage, item.postResponseScriptErrorMessage, item.testScriptErrorMessage, tests, docs, app, tags]);
+
+  // Indicador das abas de plugin: por convenção o id da aba é a chave de settings.
+  // Ponto laranja = edição pendente (draft difere do salvo); ponto normal = tem config salva.
+  const pluginIndicator = useCallback((tabId) => {
+    const saved = get(item, `settings.${tabId}`);
+    const drafted = item.draft ? get(item, `draft.settings.${tabId}`) : undefined;
+    if (item.draft && !isEqual(drafted, saved)) return <StatusDot type="pending" />;
+    return hasMeaningfulData(item.draft ? drafted : saved) ? <StatusDot /> : null;
+  }, [item]);
 
   const allTabs = useMemo(
-    () => TAB_CONFIG.map(({ key, label }) => ({ key, label, indicator: indicators[key] })),
-    [indicators]
+    () => [
+      ...TAB_CONFIG
+        .filter(({ key }) => key !== 'app' || appTabEnabled)
+        .map(({ key, label }) => ({ key, label, indicator: indicators[key] })),
+      ...pluginRequestTabs.map((t) => ({ key: t.tabKey, label: t.label, indicator: pluginIndicator(t.id) }))
+    ],
+    [indicators, appTabEnabled, pluginRequestTabs, pluginIndicator]
   );
 
   const tabPanel = useMemo(() => {
-    const Component = TAB_PANELS[requestPaneTab];
-    return Component ? <Component item={item} collection={collection} /> : <div className="mt-4">404 | Not found</div>;
-  }, [requestPaneTab, item, collection]);
+    const Component = TAB_PANELS[effectiveTab]
+      || (requestPaneTab?.startsWith('plugin:') ? pluginRequestTabRegistry.get(requestPaneTab) : null);
+    return Component ? <Component key={item.uid} item={item} collection={collection} /> : <div className="mt-4">404 | Not found</div>;
+  }, [effectiveTab, requestPaneTab, item, collection]);
 
   if (!activeTabUid || !focusedTab?.uid || !requestPaneTab) {
     return <div className="pb-4 px-4">An error occurred!</div>;
   }
 
-  const rightContent = requestPaneTab === 'body' ? (
-    <div ref={rightContentRef}>
-      <RequestBodyMode item={item} collection={collection} />
-    </div>
-  ) : requestPaneTab === 'auth' ? (
-    <div ref={rightContentRef} className="flex flex-grow justify-start items-center">
-      <AuthMode item={item} collection={collection} />
-    </div>
-  ) : null;
+  let rightContent = null;
+  switch (requestPaneTab) {
+    case 'body':
+      rightContent = (
+        <div ref={rightContentRef}>
+          <RequestBodyMode item={item} collection={collection} />
+        </div>
+      );
+      break;
+    case 'docs':
+      rightContent = (
+        <div ref={rightContentRef} className="flex items-center gap-2">
+          <DocsAction />
+          <TabBarAiAssist item={item} collection={collection} activeTab={effectiveTab} />
+        </div>
+      );
+      break;
+    case 'app':
+    case 'script':
+    case 'tests':
+      rightContent = (
+        <div ref={rightContentRef} className="flex items-center">
+          <TabBarAiAssist item={item} collection={collection} activeTab={effectiveTab} />
+        </div>
+      );
+      break;
+    default:
+      rightContent = null;
+  }
 
   return (
     <div className="flex flex-col h-full relative">
       <ResponsiveTabs
         tabs={allTabs}
-        activeTab={requestPaneTab}
+        activeTab={effectiveTab}
         onTabSelect={selectTab}
         rightContent={rightContent}
         rightContentRef={rightContent ? rightContentRef : null}

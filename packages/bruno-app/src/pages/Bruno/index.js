@@ -2,18 +2,21 @@ import React, { useState, useRef, useEffect } from 'react';
 import classnames from 'classnames';
 import ManageWorkspace from 'components/ManageWorkspace';
 import RequestTabs from 'components/RequestTabs';
+import { pluginPanelRegistry } from 'utils/plugins/registry';
+import { useIsHomeMode } from 'utils/plugins/homeMode';
 import RequestTabPanel from 'components/RequestTabPanel';
+import AppPreviewKeepAlive from 'components/AppPreviewKeepAlive';
+import AiChatSidebar from 'components/AiChatSidebar';
+import AiChatPopout from 'components/AiChatSidebar/Popout';
 import Sidebar from 'components/Sidebar';
+import OpenCollection from 'components/Sidebar/OpenCollection';
 import StatusBar from 'components/StatusBar';
 import AppTitleBar from 'components/AppTitleBar';
-import ApiSpecPanel from 'components/ApiSpecPanel';
+import TabPanelErrorBoundary from 'components/RequestTabPanel/TabPanelErrorBoundary';
 // import ErrorCapture from 'components/ErrorCapture';
 import { useSelector } from 'react-redux';
 import { isElectron } from 'utils/common/platform';
 import StyledWrapper from './StyledWrapper';
-import 'codemirror/theme/material.css';
-import 'codemirror/theme/monokai.css';
-import 'codemirror/addon/scroll/simplescrollbars.css';
 import 'swagger-ui-react/swagger-ui.css';
 import Devtools from 'components/Devtools';
 import useGrpcEventListeners from 'utils/network/grpc-event-listeners';
@@ -21,38 +24,6 @@ import useWsEventListeners from 'utils/network/ws-event-listeners';
 import Portal from 'components/Portal';
 import SaveTransientRequestContainer from 'components/SaveTransientRequest/Container';
 import SaveTransientRequest from 'components/SaveTransientRequest';
-
-require('codemirror/mode/javascript/javascript');
-require('codemirror/mode/xml/xml');
-require('codemirror/mode/sparql/sparql');
-require('codemirror/addon/comment/comment');
-require('codemirror/addon/dialog/dialog');
-require('codemirror/addon/edit/closebrackets');
-require('codemirror/addon/edit/matchbrackets');
-require('codemirror/addon/fold/brace-fold');
-require('codemirror/addon/fold/foldgutter');
-require('codemirror/addon/fold/xml-fold');
-require('codemirror/addon/hint/javascript-hint');
-require('codemirror/addon/hint/show-hint');
-require('codemirror/addon/lint/lint');
-require('codemirror/addon/lint/json-lint');
-require('codemirror/addon/mode/overlay');
-require('codemirror/addon/scroll/simplescrollbars');
-require('codemirror/addon/search/jump-to-line');
-require('codemirror/addon/search/search');
-require('codemirror/addon/search/searchcursor');
-require('codemirror/addon/display/placeholder');
-require('codemirror/keymap/sublime');
-
-require('codemirror-graphql/hint');
-require('codemirror-graphql/info');
-require('codemirror-graphql/jump');
-require('codemirror-graphql/lint');
-require('codemirror-graphql/mode');
-
-require('utils/codemirror/brunoVarInfo');
-require('utils/codemirror/javascript-lint');
-require('utils/codemirror/autocomplete');
 
 const TransientRequestModalsRenderer = ({ modals }) => {
   if (modals.length === 0) {
@@ -65,6 +36,7 @@ const TransientRequestModalsRenderer = ({ modals }) => {
         item={modals[0].item}
         collection={modals[0].collection}
         isOpen={true}
+        closeAfterSave={modals[0].closeAfterSave}
       />
     );
   }
@@ -74,12 +46,31 @@ const TransientRequestModalsRenderer = ({ modals }) => {
 
 export default function Main() {
   const activeTabUid = useSelector((state) => state.tabs.activeTabUid);
-  const activeApiSpecUid = useSelector((state) => state.apiSpec.activeApiSpecUid);
   const isDragging = useSelector((state) => state.app.isDragging);
-  const showApiSpecPage = useSelector((state) => state.app.showApiSpecPage);
   const showManageWorkspacePage = useSelector((state) => state.app.showManageWorkspacePage);
+  // Painel de HOME registrado por um plugin (`registerHomePanel`). `isHomeMode` (utils/plugins/
+  // homeMode) é a MESMA fórmula que decide a topbar em AppTitleBar — sincronizadas de propósito,
+  // senão dá para a topbar "destravar" e o conteúdo principal continuar preso no dashboard, ou o
+  // contrário. Sem plugin candidato, isHomeMode nunca vale e a tela sem aba fica como sempre foi.
+  const homePanelType = useSelector((state) => state.plugins.homePanel);
+  const HomePanel = homePanelType ? pluginPanelRegistry.get(homePanelType) : null;
+  const isHomeMode = useIsHomeMode();
   const isConsoleOpen = useSelector((state) => state.logs.isConsoleOpen);
   const saveTransientRequestModals = useSelector((state) => state.collections.saveTransientRequestModals);
+
+  // AI sidebar mounts here so it spans the full request-pane height. It reads
+  // the active collection via the active tab so the sidebar follows tab switches.
+  // The selector returns null while the sidebar is closed so the page doesn't
+  // re-render on every tabs/collections change — important on Windows where
+  // extra re-renders during initial layout were destabilising CodeMirror.
+  const isAiSidebarOpen = useSelector((state) => state.chat.isOpen);
+  const isAiPoppedOut = useSelector((state) => state.chat.isPoppedOut);
+  const activeCollection = useSelector((state) => {
+    if (!state.chat.isOpen) return null;
+    const activeTab = state.tabs.tabs.find((t) => t.uid === state.tabs.activeTabUid);
+    if (!activeTab) return null;
+    return state.collections.collections.find((c) => c.uid === activeTab.collectionUid) || null;
+  });
   const mainSectionRef = useRef(null);
   const [showRosettaBanner, setShowRosettaBanner] = useState(false);
 
@@ -138,23 +129,38 @@ export default function Main() {
         <StyledWrapper className={className} style={{ height: '100%', zIndex: 1 }}>
           <Sidebar />
           <section className="flex flex-grow flex-col overflow-hidden">
-            {showApiSpecPage && activeApiSpecUid ? (
-              <ApiSpecPanel key={activeApiSpecUid} />
-            ) : showManageWorkspacePage ? (
+            {showManageWorkspacePage ? (
               <ManageWorkspace />
+            ) : isHomeMode && HomePanel ? (
+              /* HOME: sem aba aberta, quem ocupa a tela é o painel que um plugin registrou como
+                 home. Abrir uma request cria aba e a interface normal volta inteira — a home não
+                 substitui nada, ela ocupa o espaço que estava vazio. */
+              <HomePanel />
             ) : (
               <>
                 <RequestTabs />
-                <RequestTabPanel key={activeTabUid} />
+                <div className="relative flex flex-col flex-grow overflow-hidden">
+                  <TabPanelErrorBoundary key={activeTabUid} tabUid={activeTabUid}>
+                    <RequestTabPanel key={activeTabUid} />
+                  </TabPanelErrorBoundary>
+                  <AppPreviewKeepAlive />
+                </div>
               </>
             )}
           </section>
+          {isAiSidebarOpen && activeCollection && isAiPoppedOut && (
+            <AiChatPopout collection={activeCollection} />
+          )}
+          {isAiSidebarOpen && activeCollection && !isAiPoppedOut && !showManageWorkspacePage && (
+            <AiChatSidebar collection={activeCollection} />
+          )}
         </StyledWrapper>
       </div>
 
       <Devtools mainSectionRef={mainSectionRef} />
       <StatusBar />
       <TransientRequestModalsRenderer modals={saveTransientRequestModals} />
+      <OpenCollection />
     </div>
     // </ErrorCapture>
   );

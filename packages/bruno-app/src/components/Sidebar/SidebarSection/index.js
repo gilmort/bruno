@@ -10,8 +10,11 @@ const SidebarSection = ({
   icon: Icon,
   actions,
   children,
-  className = ''
+  className = '',
+  onActivate
 }) => {
+  // Modo "leaf": clique no header abre direto (1 clique), sem chevron nem filhos.
+  const isLeaf = typeof onActivate === 'function';
   const { isExpanded, setSectionExpanded, getExpandedCount } = useSidebarAccordion();
   const [localExpanded, setLocalExpanded] = useState(() => isExpanded(id));
   const sectionRef = useRef(null);
@@ -36,11 +39,11 @@ const SidebarSection = ({
     <StyledWrapper className={className}>
       <div
         ref={sectionRef}
-        className={`sidebar-section ${localExpanded ? 'expanded' : ''} ${isOnlyExpanded ? 'single-expanded' : ''} ${expandedCount > 1 && localExpanded ? 'multi-expanded' : ''}`}
+        className={`sidebar-section ${localExpanded ? 'expanded' : ''} ${isLeaf ? 'leaf' : ''} ${isOnlyExpanded ? 'single-expanded' : ''} ${expandedCount > 1 && localExpanded ? 'multi-expanded' : ''}`}
       >
         <div
           className="section-header"
-          onClick={handleToggle}
+          onClick={isLeaf ? onActivate : handleToggle}
         >
           <div className="section-header-left">
             <div
@@ -48,17 +51,19 @@ const SidebarSection = ({
               tabIndex={0}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault(); handleToggle();
+                  e.preventDefault(); (isLeaf ? onActivate : handleToggle)();
                 }
               }}
             >
-              <ActionIcon size="sm" className="section-toggle">
-                {localExpanded ? (
-                  <IconChevronDown size={12} stroke={1.5} />
-                ) : (
-                  <IconChevronRight size={12} stroke={1.5} />
-                )}
-              </ActionIcon>
+              {!isLeaf && (
+                <ActionIcon size="sm" className="section-toggle">
+                  {localExpanded ? (
+                    <IconChevronDown size={12} stroke={1.5} />
+                  ) : (
+                    <IconChevronRight size={12} stroke={1.5} />
+                  )}
+                </ActionIcon>
+              )}
               {Icon && <Icon size={14} stroke={1.5} className="section-icon" />}
             </div>
             <span className="section-title">{title}</span>
@@ -77,7 +82,7 @@ const SidebarSection = ({
             </div>
           )}
         </div>
-        {localExpanded && (
+        {!isLeaf && localExpanded && (
           <div className="section-content">
             {children}
           </div>

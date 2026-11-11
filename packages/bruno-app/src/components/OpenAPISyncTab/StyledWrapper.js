@@ -1,97 +1,7 @@
 import styled from 'styled-components';
-import { rgba, darken } from 'polished';
+import { rgba } from 'polished';
 
 const StyledWrapper = styled.div`
-
-  .setup-header {
-    margin-bottom: 1.5rem;
-  }
-
-  .setup-title {
-    font-size: ${(props) => props.theme.font.size.base};
-    font-weight: 600;
-    color: ${(props) => props.theme.text};
-    margin: 0 0 0.375rem 0;
-  }
-
-  .setup-description {
-    font-size: ${(props) => props.theme.font.size.sm};
-    color: ${(props) => props.theme.colors.text.muted};
-    line-height: 1.5;
-    margin: 0;
-  }
-
-  .setup-form {
-    border: 1px solid ${(props) => props.theme.border.border1};
-    border-radius: ${(props) => props.theme.border.radius.md};
-    padding: 1rem;
-    margin-bottom: 1.25rem;
-
-    .url-label {
-      display: block;
-      font-size: ${(props) => props.theme.font.size.sm};
-      font-weight: 500;
-      color: ${(props) => props.theme.text};
-      margin-bottom: 0.5rem;
-    }
-
-    .url-row {
-      display: flex;
-      gap: 0.5rem;
-      align-items: center;
-      margin-top: 0.25rem;
-    }
-
-    .url-input {
-      flex: 1;
-      padding: 0.25rem 0.75rem;
-      font-size: ${(props) => props.theme.font.size.sm};
-      color: ${(props) => props.theme.text};
-      background: ${(props) => props.theme.input.bg};
-      border: 1px solid ${(props) => props.theme.input.border};
-      border-radius: ${(props) => props.theme.border.radius.md};
-      outline: none;
-
-      &:focus {
-        border-color: ${(props) => props.theme.input.focusBorder};
-      }
-
-      &::placeholder {
-        color: ${(props) => props.theme.colors.text.muted};
-      }
-    }
-  }
-
-  .setup-hint {
-    font-size: ${(props) => props.theme.font.size.xs};
-    color: ${(props) => props.theme.colors.text.muted};
-    margin: 0.5rem 0 0 0;
-  }
-
-  .setup-error {
-    font-size: ${(props) => props.theme.font.size.sm};
-    color: ${(props) => props.theme.colors.text.danger};
-    margin: 0.5rem 0 0 0;
-  }
-
-  .setup-features {
-    display: flex;
-    flex-direction: column;
-    gap: 0.375rem;
-  }
-
-  .setup-feature {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: ${(props) => props.theme.font.size.sm};
-    color: ${(props) => props.theme.colors.text.muted};
-
-    svg {
-      color: ${(props) => props.theme.colors.text.green};
-      flex-shrink: 0;
-    }
-  }
 
   /* Spec Info Card — borderless header */
   .spec-info-card {
@@ -630,32 +540,6 @@ const StyledWrapper = styled.div`
       margin-bottom: 5px;
     }
 
-    .settings-input {
-      width: 100%;
-      padding: 7px 10px;
-      font-size: 12px;
-      font-family: monospace;
-      color: ${(props) => props.theme.text};
-      border: 1px solid ${(props) => props.theme.border.border1};
-      border-radius: 5px;
-      background: ${(props) => props.theme.input.bg};
-      outline: none;
-      box-sizing: border-box;
-      text-align: left;
-
-      &:focus {
-        border-color: ${(props) => props.theme.input.focusBorder};
-      }
-
-      &.file-pick-btn {
-        cursor: pointer;
-        color: ${(props) => props.theme.colors.text.muted};
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-    }
-
     .settings-toggle-row {
       display: flex;
       align-items: center;
@@ -687,7 +571,7 @@ const StyledWrapper = styled.div`
       background: ${(props) => props.theme.colors.text.muted};
 
       &.active {
-        background: ${(props) => props.theme.colors.text.green};
+        background: ${(props) => props.theme.button2.color.primary.bg};
       }
 
       .toggle-knob {
@@ -724,9 +608,9 @@ const StyledWrapper = styled.div`
         transition: all 0.15s;
 
         &.active {
-          border-color: ${(props) => props.theme.button2.color.primary.border};
-          background: ${(props) => props.theme.button2.color.primary.bg};
-          color: ${(props) => props.theme.button2.color.primary.text};
+          border-color: ${(props) => props.theme.accents.primary};
+          background: ${(props) => rgba(props.theme.accents.primary, 0.07)};
+          color: ${(props) => props.theme.accents.primary};
         }
       }
     }
@@ -1503,143 +1387,154 @@ const StyledWrapper = styled.div`
     .text-diff-container {
       border-radius: ${(props) => props.theme.border.radius.sm};
       border: 1px solid ${(props) => props.theme.border.border1};
-      overflow: auto;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: ${(props) => props.theme.bg};
 
       .diff-column-headers {
-        display: flex;
+        display: grid;
+        grid-template-columns: 9ch 1fr 9ch 1fr;
         border-bottom: 1px solid ${(props) => props.theme.border.border1};
-        position: sticky;
-        top: 0;
-        z-index: 2;
         background: ${(props) => props.theme.bg};
+        flex-shrink: 0;
 
         .diff-column-label {
-          flex: 1;
           padding: 6px 12px;
           font-size: 12px;
           font-weight: 600;
           color: ${(props) => props.theme.colors.text.muted};
+          grid-column: span 2;
 
-          &:first-child {
-            border-right: 1px solid ${(props) => props.theme.border.border1};
+          &:last-child {
+            border-left: 1px solid ${(props) => props.theme.border.border1};
           }
         }
       }
 
-      .d2h-wrapper {
-        background-color: ${(props) => props.theme.bg} !important;
+      /* The Virtuoso scroll container fills the rest of the modal body. */
+      > div[data-testid='virtuoso-scroller'],
+      > div:last-child {
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
+      /* Active block gets a persistent 3px yellow bar down the left edge. */
+      .diff-row {
+        display: grid;
+        grid-template-columns: 9ch 1fr 9ch 1fr;
         font-family: 'Fira Code', monospace;
         font-size: 12px;
+        line-height: 1.5;
+        /* Must match Virtuoso's fixedItemHeight in SpecDiffModal/index.js */
+        min-height: 18px;
+        color: ${(props) => props.theme.text};
+        font-variant-ligatures: none;
+        font-feature-settings: 'liga' 0, 'calt' 0;
       }
 
-      .d2h-file-wrapper {
-        border: none;
-        border-radius: 0;
-        margin-bottom: 0;
+      /* Vertical divider between the two side-by-side panels. Applied to the
+         third grid cell (right-side line number), aligned with the header's
+         existing border-right on the "Current Spec" label. */
+      .diff-row > *:nth-child(3) {
+        border-left: 1px solid ${(props) => props.theme.border.border1};
       }
 
-      .d2h-file-header {
-        display: none;
+      .diff-row.diff-row-focused > .diff-cell-num:first-child {
+        box-shadow: inset 3px 0 0 ${(props) => props.theme.colors.text.yellow};
       }
 
-      .d2h-files-diff {
-        width: 100%;
+      .diff-row.diff-row-focused > .diff-cell-num {
+        color: ${(props) => props.theme.text};
+        font-weight: 600;
+      }
 
-        .d2h-file-side-diff:first-child {
-          border-right: 1px solid ${(props) => props.theme.border.border1};
+      .diff-cell-num {
+        padding: 0 0.5em;
+        text-align: right;
+        color: ${(props) => props.theme.colors.text.muted};
+        user-select: none;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+
+        &.diff-kind-del {
+          background-color: color-mix(in srgb, ${(props) => props.theme.colors.text.danger} 22%, transparent);
+        }
+
+        &.diff-kind-ins {
+          background-color: color-mix(in srgb, ${(props) => props.theme.colors.text.green} 15%, transparent);
+        }
+
+        &.diff-kind-empty {
+          background-color: ${(props) => rgba(props.theme.colors.text.muted, 0.05)};
         }
       }
 
-      .d2h-code-side-linenumber {
-        background: transparent !important;
-        position: static !important;
+      .diff-cell-code {
+        display: flex;
+        min-width: 0;
+        padding: 0 0.5em;
+        white-space: pre;
+        overflow: hidden;
+
+        &.diff-kind-del {
+          background-color: color-mix(in srgb, ${(props) => props.theme.colors.text.danger} 22%, transparent);
+        }
+
+        &.diff-kind-ins {
+          background-color: color-mix(in srgb, ${(props) => props.theme.colors.text.green} 15%, transparent);
+        }
+
+        &.diff-kind-empty {
+          background-color: ${(props) => rgba(props.theme.colors.text.muted, 0.05)};
+        }
       }
 
-      .d2h-diff-tbody {
-        tr td { border: none !important; }
+      .diff-prefix {
+        width: 1em;
+        flex-shrink: 0;
+        color: ${(props) => props.theme.colors.text.muted};
+        user-select: none;
       }
 
-      .d2h-ins {
-        background-color: color-mix(in srgb, ${(props) => props.theme.colors.text.green} 15%, transparent) !important;
-        border-color: color-mix(in srgb, ${(props) => props.theme.colors.text.green} 40%, transparent) !important;
+      .diff-content {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow-x: auto;
+        scrollbar-width: thin;
+
+        del {
+          background-color: color-mix(in srgb, ${(props) => props.theme.colors.text.danger} 40%, transparent);
+          text-decoration: none;
+        }
+
+        ins {
+          background-color: color-mix(in srgb, ${(props) => props.theme.colors.text.green} 40%, transparent);
+          text-decoration: none;
+        }
       }
 
-      .d2h-del {
-        background-color: color-mix(in srgb, ${(props) => props.theme.colors.text.danger} 15%, transparent) !important;
-        border-color: color-mix(in srgb, ${(props) => props.theme.colors.text.danger} 40%, transparent) !important;
-      }
+      /* Hunk row must be exactly 18px so Virtuoso's fixedItemHeight is
+         accurate. Borders would add 2px; we use inset box-shadow to get the
+         visual top/bottom rule without consuming layout space. Vertical
+         padding removed for the same reason. */
+      .diff-row-hunk {
+        grid-template-columns: 1fr;
+        background-color: ${(props) => rgba(props.theme.colors.text.muted, 0.08)};
+        color: ${(props) => props.theme.colors.text.muted};
+        box-shadow:
+          inset 0 1px 0 ${(props) => props.theme.border.border1},
+          inset 0 -1px 0 ${(props) => props.theme.border.border1};
 
-      .d2h-file-diff .d2h-ins.d2h-change {
-        background-color: color-mix(in srgb, ${(props) => props.theme.colors.text.green} 25%, transparent) !important;
-      }
-
-      .d2h-file-diff .d2h-del.d2h-change {
-        background-color: color-mix(in srgb, ${(props) => props.theme.colors.text.warning} 20%, transparent) !important;
-      }
-
-      .d2h-code-line ins,
-      .d2h-code-side-line ins {
-        background-color: color-mix(in srgb, ${(props) => props.theme.colors.text.green} 40%, transparent) !important;
-        text-decoration: none;
-      }
-
-      .d2h-code-line del,
-      .d2h-code-side-line del {
-        background-color: color-mix(in srgb, ${(props) => props.theme.colors.text.danger} 40%, transparent) !important;
-        text-decoration: none;
-      }
-
-      .d2h-code-line,
-      .d2h-code-side-line {
-        color: ${(props) => props.theme.text} !important;
-        word-break: break-all;
-      }
-
-      .d2h-code-line-ctn {
-        word-break: break-all;
-      }
-
-      .d2h-tag {
-        font-size: 9px;
-        font-weight: 500;
-        padding: 1px 5px;
-        border-radius: ${(props) => props.theme.border.radius.sm};
-        text-transform: uppercase;
-        letter-spacing: 0.02em;
-        border: none;
-      }
-
-      .d2h-changed-tag {
-        background-color: color-mix(in srgb, ${(props) => props.theme.colors.text.warning} 15%, transparent);
-        color: ${(props) => props.theme.colors.text.warning};
-      }
-
-      .d2h-added-tag {
-        background-color: color-mix(in srgb, ${(props) => props.theme.colors.text.green} 13%, transparent);
-        color: ${(props) => props.theme.colors.text.green};
-      }
-
-      .d2h-deleted-tag {
-        background-color: color-mix(in srgb, ${(props) => props.theme.colors.text.danger} 13%, transparent);
-        color: ${(props) => props.theme.colors.text.danger};
-      }
-
-      .d2h-renamed-tag,
-      .d2h-moved-tag {
-        display: none;
-      }
-
-      .d2h-file-wrapper,
-      .d2h-file-diff,
-      .d2h-code-wrapper,
-      .d2h-diff-table,
-      .d2h-code-line,
-      .d2h-code-side-line,
-      .d2h-code-line-ctn,
-      .d2h-code-linenumber,
-      .d2h-code-side-linenumber {
-        font-family: 'Fira Code', monospace !important;
-        font-size: 12px !important;
+        .diff-cell-hunk {
+          padding: 0 0.75em;
+          font-family: 'Fira Code', monospace;
+          font-size: 11px;
+          white-space: pre;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
       }
     }
 
@@ -1661,6 +1556,15 @@ const StyledWrapper = styled.div`
     }
 
     .spec-diff-modal {
+
+      .spec-diff-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+      }
+
       .spec-diff-badges {
         display: flex;
         gap: 0.5rem;
@@ -1671,12 +1575,50 @@ const StyledWrapper = styled.div`
       .spec-diff-subtitle {
         font-size: ${(props) => props.theme.font.size.sm};
         color: ${(props) => props.theme.colors.text.muted};
-        margin: 0 0 0.75rem 0;
+      }
+
+      .spec-diff-nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+
+        .spec-diff-nav-counter {
+          font-size: ${(props) => props.theme.font.size.sm};
+          color: ${(props) => props.theme.colors.text.muted};
+        }
+
+        .spec-diff-nav-buttons {
+          display: flex;
+          gap: 0.5rem;
+        }
+
+        .spec-diff-nav-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+          padding: 0.25rem 0.5rem;
+          font-size: ${(props) => props.theme.font.size.xs};
+          background: none;
+          border: 1px solid ${(props) => props.theme.border.border1};
+          border-radius: ${(props) => props.theme.border.radius.sm};
+          color: ${(props) => props.theme.text};
+          cursor: pointer;
+
+          &:hover:not(:disabled) {
+            background: ${(props) => props.theme.background.surface1};
+          }
+
+          &:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+          }
+        }
       }
 
       .spec-diff-body {
         .text-diff-container {
-          max-height: calc(80vh - 140px);
+          height: calc(80vh - 140px);
         }
       }
     }
@@ -1712,6 +1654,7 @@ const StyledWrapper = styled.div`
     .bulk-actions {
       display: flex;
       gap: 0.5rem;
+      user-select: none; /* these are controls, not selectable text (e.g. double-click on the info icon) */
     }
 
     .bulk-btn {
@@ -1743,6 +1686,77 @@ const StyledWrapper = styled.div`
 
       .spinner-icon {
         animation: spin 1s linear infinite;
+      }
+    }
+
+    /* the three Preserve elements read as one control: label + info + toggle */
+    .preserve-values-control {
+      display: inline-flex;
+      align-items: center;
+      margin-right: 0.25rem;
+      padding: 0.25rem 0.5rem;
+      font-size: ${(props) => props.theme.font.size.xs};
+      color: ${(props) => props.theme.text};
+
+      .preserve-values-label {
+        white-space: nowrap;
+      }
+
+      /* the shared InfoCircle icon ships a hardcoded ml-2 (8px); override it
+         so the info icon sits tight to the label. It is a hover-only tooltip
+         affordance, not a button — use a help cursor and never show a
+         click/focus box around it. */
+      svg {
+        margin-left: 4px;
+        cursor: help;
+      }
+      svg:focus,
+      svg:focus-visible,
+      span:focus,
+      span:focus-visible {
+        outline: none;
+        box-shadow: none;
+        background: transparent;
+      }
+
+      /* compact themed track + knob toggle, sized to the button row height */
+      .preserve-toggle {
+        margin-right: 4px; /* space between the toggle and the label */
+        width: 26px;
+        height: 14px;
+        border-radius: 7px;
+        border: none;
+        padding: 0;
+        flex-shrink: 0;
+        position: relative;
+        cursor: pointer;
+        transition: background 0.2s;
+        background: ${(props) => props.theme.colors.text.muted};
+
+        &.active {
+          background: ${(props) => props.theme.button2.color.primary.bg};
+        }
+
+        &:focus-visible {
+          outline: 2px solid ${(props) => props.theme.button2.color.primary.bg};
+          outline-offset: 2px;
+        }
+
+        .preserve-toggle-knob {
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          background: #fff;
+          position: absolute;
+          top: 2px;
+          left: 2px;
+          transition: left 0.2s;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        }
+
+        &.active .preserve-toggle-knob {
+          left: 14px;
+        }
       }
     }
 
@@ -2203,51 +2217,6 @@ const StyledWrapper = styled.div`
         border-bottom: none;
       }
     }
-  }
-
-  /* URL/File mode toggle in setup form and settings modal */
-  .setup-mode-toggle {
-    display: inline-flex;
-    flex-shrink: 0;
-    align-items: stretch;
-    align-self: stretch;
-    gap: 2px;
-    padding: 2px;
-    background: ${(props) => props.theme.background.surface1};
-    border-radius: ${(props) => props.theme.border.radius.md};
-  }
-
-  .setup-mode-btn {
-    padding: 0 0.65rem;
-    font-size: ${(props) => props.theme.font.size.sm};
-    font-weight: 500;
-    color: ${(props) => props.theme.text};
-    background: transparent;
-    border: none;
-    border-radius: calc(${(props) => props.theme.border.radius.md} - 3px);
-    cursor: pointer;
-    transition: background 0.12s, color 0.12s;
-    white-space: nowrap;
-
-    &.active {
-      background: ${(props) => darken(0.03, props.theme.background.base)};
-      color: ${(props) => props.theme.button2.color.secondary.text};
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
-    }
-
-    &:hover:not(.active) {
-      color: ${(props) => props.theme.text};
-    }
-  }
-
-  .file-pick-btn {
-    text-align: left;
-    cursor: pointer;
-    font-family: monospace;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: ${(props) => props.theme.colors.text.muted};
   }
 
   /* File not found banner */

@@ -3,8 +3,9 @@ const path = require('path');
 const { execSync } = require('node:child_process');
 const isDev = require('electron-is-dev');
 const os = require('os');
-const { initializeShellEnv, waitForShellEnv } = require('./store/shell-env-state');
+const { initializeShellEnv, waitForShellEnv, markShellEnvStale, refreshShellEnvIfStale } = require('./store/shell-env-state');
 const { percentageToZoomLevel } = require('@usebruno/common');
+const { isBenchmarkEnabled } = require('./utils/benchmark');
 
 if (isDev) {
   if (!fs.existsSync(path.join(__dirname, '../../bruno-js/src/sandbox/bundle-browser-rollup.js'))) {
@@ -14,9 +15,12 @@ if (isDev) {
   }
 }
 
-const { format } = require('url');
-const { BrowserWindow, app, session, Menu, globalShortcut, ipcMain, nativeTheme } = require('electron');
+const { BrowserWindow, app, session, Menu, globalShortcut, ipcMain, nativeTheme, shell } = require('electron');
 const { setContentSecurityPolicy } = require('electron-util');
+const { getAppUrl, isAppUrl, restrictIpcToAppFrames } = require('./utils/trusted-url');
+
+// NOTE(security): Must run before any ipcMain.handle/on registration below.
+restrictIpcToAppFrames(ipcMain);
 
 if (isDev && process.env.ELECTRON_USER_DATA_PATH) {
   console.debug('`ELECTRON_USER_DATA_PATH` found, modifying `userData` path: \n'
@@ -33,25 +37,48 @@ if (os.platform() === 'linux') {
   app.commandLine.appendSwitch('xdg-portal-required-version', '4');
 }
 
+const { registerPluginSchemePrivileged } = require('./plugins/protocol');
+registerPluginSchemePrivileged();
+
+if (isBenchmarkEnabled()) {
+  app.commandLine.appendSwitch('enable-precise-memory-info');
+}
+
 const menuTemplate = require('./app/menu-template');
 const { openCollection } = require('./app/collections');
 const registerNetworkIpc = require('./ipc/network');
 const registerCollectionsIpc = require('./ipc/collection');
+const { registerYmlMigrationIpc } = require('./ipc/yml-migration');
 const registerFilesystemIpc = require('./ipc/filesystem');
 const registerPreferencesIpc = require('./ipc/preferences');
+const registerSnapshotIpc = require('./ipc/snapshot');
 const registerSystemMonitorIpc = require('./ipc/system-monitor');
 const registerWorkspaceIpc = require('./ipc/workspace');
 const registerApiSpecIpc = require('./ipc/apiSpec');
 const registerGitIpc = require('./ipc/git');
 const registerOpenAPISyncIpc = require('./ipc/openapi-sync');
+const registerPluginsIpc = require('./ipc/plugins');
+const { PluginLoader } = require('./plugins/loader');
+const registerMockServerIpc = require('./ipc/mock-server');
+const registerAiIpc = require('./ipc/ai');
+const registerAiAutocompleteIpc = require('./ipc/ai/autocomplete');
+const { registerMountIpc } = require('./ipc/mount');
+const { registerSqliteIpc } = require('./ipc/sqlite');
+const sqliteService = require('./services/sqlite');
+const { clearAllRunnerResponses } = require('./services/runner-exchange');
+const { transientManager } = require('./services/transient');
+const { registerWsdlIpc } = require('./ipc/wsdl');
 const collectionWatcher = require('./app/collection-watcher');
 const WorkspaceWatcher = require('./app/workspace-watcher');
+const shellEnvWatcher = require('./app/shell-env-watcher');
 const ApiSpecWatcher = require('./app/apiSpecsWatcher');
 const { loadWindowState, saveBounds, saveMaximized } = require('./utils/window');
 const { preferencesUtil, getPreferences, savePreferences } = require('./store/preferences');
 const { globalEnvironmentsManager } = require('./store/workspace-environments');
 const registerNotificationsIpc = require('./ipc/notifications');
 const registerGlobalEnvironmentsIpc = require('./ipc/global-environments');
+const registerAppDocumentIpc = require('./ipc/app-document');
+const AppDocuments = require('./app/app-documents');
 const TerminalManager = require('./ipc/terminal');
 const { safeParseJSON, safeStringifyJSON } = require('./utils/common');
 const { getDomainsWithCookies } = require('./utils/cookies');
@@ -62,9 +89,19 @@ const { handleAppProtocolUrl, getAppProtocolUrlFromArgv } = require('./utils/dee
 
 const systemMonitor = new SystemMonitor();
 const terminalManager = new TerminalManager();
+const pluginLoader = new PluginLoader({
+  pluginsDir: path.join(os.homedir(), '.bruno', 'plugins'),
+  ipcMain,
+  getMainWindow: () => mainWindow
+});
+const { startBenchmark, stopBenchmark } = require('./benchmark');
 
 const workspaceWatcher = new WorkspaceWatcher();
 const apiSpecWatcher = new ApiSpecWatcher();
+const appDocuments = new AppDocuments();
+
+// Scheme privileges are only honoured when registered before `app.ready`.
+AppDocuments.registerScheme();
 
 // Reference: https://content-security-policy.com/
 const contentSecurityPolicy = [
@@ -72,7 +109,7 @@ const contentSecurityPolicy = [
   'connect-src \'self\' https://*.posthog.com',
   'font-src \'self\' https: data:;',
   'frame-src data:',
-  'script-src \'self\' data:',
+  'script-src \'self\' data: bruno-plugin:',
   // this has been commented out to make oauth2 work
   // "form-action 'none'",
   // we make an exception and allow http for images so that
@@ -122,11 +159,12 @@ const focusMainWindow = () => {
   }
 };
 
-const closeAllWatchers = () => {
-  collectionWatcher.closeAllWatchers();
-  workspaceWatcher.closeAllWatchers();
-  apiSpecWatcher.closeAllWatchers();
-};
+const closeAllWatchers = () => Promise.allSettled([
+  collectionWatcher.closeAllWatchers(),
+  workspaceWatcher.closeAllWatchers(),
+  apiSpecWatcher.closeAllWatchers(),
+  shellEnvWatcher.close()
+]);
 
 // Parse protocol URL from command line arguments (if any)
 appProtocolUrl = getAppProtocolUrlFromArgv(process.argv);
@@ -181,7 +219,13 @@ if (useSingleInstance && !gotTheLock) {
 
 // Prepare the renderer once the app is ready
 app.on('ready', async () => {
+  const { registerPluginProtocol } = require('./plugins/protocol');
+  registerPluginProtocol(path.join(os.homedir(), '.bruno', 'plugins'));
+
   initializeShellEnv();
+  await transientManager.clearStale();
+
+  startBenchmark();
 
   if (isDev) {
     const { installExtension, REDUX_DEVTOOLS, REACT_DEVELOPER_TOOLS } = require('electron-devtools-installer');
@@ -274,6 +318,10 @@ app.on('ready', async () => {
     return mainWindow.isMaximized();
   });
 
+  ipcMain.handle('renderer:window-is-fullscreen', () => {
+    return mainWindow.isFullScreen();
+  });
+
   ipcMain.handle('renderer:open-preferences', () => {
     ipcMain.emit('main:open-preferences');
   });
@@ -326,7 +374,7 @@ app.on('ready', async () => {
       width: 350,
       height: 250,
       webPreferences: {
-        nodeIntegration: true
+        nodeIntegration: false
       }
     });
     aboutWindow.removeMenu();
@@ -342,14 +390,33 @@ app.on('ready', async () => {
     }
     mainWindow.show();
   });
-  const devPort = process.env.BRUNO_DEV_PORT || 3000;
-  const url = isDev
-    ? `http://localhost:${devPort}`
-    : format({
-        pathname: path.join(__dirname, '../web/index.html'),
-        protocol: 'file:',
-        slashes: true
-      });
+  const url = getAppUrl();
+
+  // Variáveis do shell são lidas UMA vez, no boot (initializeShellEnv, acima). Quem exporta um
+  // token no ~/.zshrc tinha de fechar e reabrir o app para o valor novo valer. O watcher relê o
+  // ambiente quando um arquivo de perfil muda, e como getProcessEnvVars monta o resultado a partir
+  // de `process.env` a cada requisição, a próxima chamada já usa o valor novo.
+  shellEnvWatcher.start(mainWindow);
+
+  // FOCO = "o usuário pode ter mexido em algo lá fora". Só marca; não lê nada aqui, porque ler o
+  // ambiente custa segundos e a maioria dos focos não é seguida de requisição nenhuma. Quem paga o
+  // custo é o momento do uso (ipc `renderer:shell-env-touch`, disparado ao abrir um request).
+  mainWindow.on('focus', () => markShellEnvStale());
+
+  // Disparado quando uma aba de request é aberta. Fire-and-forget de propósito: a resposta não
+  // interessa ao renderer, e prender a UI por 5s seria pior que o token velho. O aviso de que algo
+  // mudou chega depois, pelo `main:shell-env-updated`.
+  ipcMain.handle('renderer:shell-env-touch', async () => {
+    try {
+      const changed = await refreshShellEnvIfStale();
+      if (changed.length && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('main:shell-env-updated', { names: changed });
+      }
+    } catch (err) {
+      console.warn('Shell env refresh failed:', err.message);
+    }
+    return true;
+  });
 
   mainWindow.loadURL(url).catch((reason) => {
     console.error(`Error: Failed to load URL: "${url}" (Electron shows a blank screen because of this).`);
@@ -405,11 +472,30 @@ app.on('ready', async () => {
     ipcMain.emit('main:start-quit-flow');
   });
 
+  // The window must only ever show the app's own document: any other target
+  // (e.g. a link in a schema description or AI reply) would inherit the preload
+  // bridge. Block it and hand http(s) URLs to the system browser.
+  const guardNavigation = (event, url) => {
+    if (isAppUrl(url)) return;
+    event.preventDefault();
+    if (/^(http:\/\/|https:\/\/)/.test(url)) {
+      shell.openExternal(url).catch((err) => console.error('Failed to open external URL:', err));
+    }
+  };
+  mainWindow.webContents.on('will-navigate', guardNavigation);
+  mainWindow.webContents.on('will-frame-navigate', guardNavigation);
   mainWindow.webContents.on('will-redirect', (event, url) => {
     event.preventDefault();
     if (/^(http:\/\/|https:\/\/)/.test(url)) {
-      require('electron').shell.openExternal(url);
+      shell.openExternal(url).catch((err) => console.error('Failed to open external URL:', err));
     }
+  });
+
+  // Guests (HTML preview, app views) must never get the preload bridge or Node.
+  mainWindow.webContents.on('will-attach-webview', (event, webPreferences) => {
+    delete webPreferences.preload;
+    webPreferences.nodeIntegration = false;
+    webPreferences.contextIsolation = true;
   });
 
   mainWindow.webContents.once('did-finish-load', () => {
@@ -418,7 +504,32 @@ app.on('ready', async () => {
     }
   });
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  const AI_POPOUT_FRAME_PREFIX = 'bruno-ai-assistant';
+  const isAiPopoutFrame = (frameName) => Boolean(frameName && frameName.startsWith(AI_POPOUT_FRAME_PREFIX));
+
+  mainWindow.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    if (isAiPopoutFrame(frameName) && (!url || url === 'about:blank')) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: 480,
+          height: 640,
+          minWidth: 400,
+          minHeight: 480,
+          backgroundColor: themeBg,
+          icon: path.join(__dirname, 'about', '256x256.png'),
+          autoHideMenuBar: true,
+          // No OS title bar, the chat header is the drag region and carries
+          // its own close/dock controls.
+          frame: false,
+          webPreferences: {
+            preload: '',
+            nodeIntegration: false,
+            contextIsolation: true
+          }
+        }
+      };
+    }
     try {
       const { protocol } = new URL(url);
       if (['https:', 'http:'].includes(protocol)) {
@@ -428,6 +539,27 @@ app.on('ready', async () => {
       console.error(e);
     }
     return { action: 'deny' };
+  });
+
+  mainWindow.webContents.on('did-create-window', (childWindow, { frameName }) => {
+    if (!isAiPopoutFrame(frameName)) return;
+    // Links inside AI responses open in the default browser and must never
+    // navigate the popout document itself (that would tear down the portal).
+    const openExternally = (url) => {
+      if (/^https?:\/\//.test(url)) {
+        shell.openExternal(url).catch((err) => {
+          console.error('Failed to open external URL from AI popout:', err);
+        });
+      }
+    };
+    childWindow.webContents.setWindowOpenHandler(({ url }) => {
+      openExternally(url);
+      return { action: 'deny' };
+    });
+    childWindow.webContents.on('will-navigate', (event, url) => {
+      event.preventDefault();
+      openExternally(url);
+    });
   });
 
   mainWindow.webContents.on('did-finish-load', async () => {
@@ -461,38 +593,90 @@ app.on('ready', async () => {
   registerNetworkIpc(mainWindow);
   registerGlobalEnvironmentsIpc(mainWindow, globalEnvironmentsManager);
   registerCollectionsIpc(mainWindow, collectionWatcher);
+  registerYmlMigrationIpc(mainWindow, collectionWatcher);
   registerPreferencesIpc(mainWindow, collectionWatcher);
+  registerSnapshotIpc();
   registerWorkspaceIpc(mainWindow, workspaceWatcher);
   registerApiSpecIpc(mainWindow, apiSpecWatcher);
   registerNotificationsIpc(mainWindow, collectionWatcher);
   registerFilesystemIpc(mainWindow);
   registerSystemMonitorIpc(mainWindow, systemMonitor);
+  registerPluginsIpc(mainWindow, pluginLoader);
+  pluginLoader.scan();
   registerGitIpc(mainWindow);
   registerOpenAPISyncIpc(mainWindow);
+  registerMockServerIpc(mainWindow);
+  registerAiIpc(mainWindow);
+  registerAiAutocompleteIpc(mainWindow);
+  registerMountIpc();
+  sqliteService.openDatabase();
+  clearAllRunnerResponses().catch((err) => console.warn('[runner] failed to clear stored responses', err));
+  registerSqliteIpc();
+  appDocuments.handleProtocol();
+  registerAppDocumentIpc(appDocuments, mainWindow);
+  registerWsdlIpc();
+
+  // Internal delegator
+  ipcMain.handle('main:cache-clear', async () => {
+    ipcMain.emit('internal:snapshot:reset');
+  });
 });
 
-// Quit the app once all windows are closed
-app.on('before-quit', () => {
-  closeAllWatchers();
-  // Release single instance lock to allow other instances to take over
-  if (useSingleInstance && gotTheLock) {
-    app.releaseSingleInstanceLock();
-  }
+// Quit the app once all windows are closed.
+//
+// We defer the actual exit until async cleanup (chokidar fsevents handles)
+// finishes, otherwise the main process exits while native watcher cleanup
+// is mid-flight, and Chromium helper processes can detect the broken IPC
+// channel and abort(), producing the macOS "quit unexpectedly" dialog.
+let quitInProgress = false;
+app.on('before-quit', (event) => {
+  if (quitInProgress) return;
+  quitInProgress = true;
+  event.preventDefault();
 
-  try {
-    cookiesStore.saveCookieJar(true);
-  } catch (err) {
-    console.warn('Failed to flush cookies on quit', err);
-  }
+  (async () => {
+    try {
+      await stopBenchmark();
+    } catch (err) {
+      console.error('[benchmark] Failed to stop benchmark writer:', err);
+    }
 
-  // Stop system monitoring
-  systemMonitor.stop();
+    try {
+      await Promise.race([
+        closeAllWatchers(),
+        // Cap the wait so a stuck watcher can't block exit indefinitely.
+        new Promise((resolve) => setTimeout(resolve, 2000))
+      ]);
+    } catch {}
 
-  try {
-    terminalManager.killAll();
-  } catch (err) {
-    console.error('Failed to kill all terminals on quit', err);
-  }
+    try { await require('./ipc/mount').shutdown({ force: true }); } catch { }
+
+    try { await clearAllRunnerResponses(); } catch {}
+
+    try { await sqliteService.reclaimDiskSpace(); } catch {}
+
+    try { sqliteService.shutdown(); } catch {}
+
+    if (useSingleInstance && gotTheLock) {
+      try { app.releaseSingleInstanceLock(); } catch {}
+    }
+
+    try {
+      cookiesStore.saveCookieJar(true);
+    } catch (err) {
+      console.warn('Failed to flush cookies on quit', err);
+    }
+
+    systemMonitor.stop();
+
+    try {
+      terminalManager.killAll();
+    } catch (err) {
+      console.error('Failed to kill all terminals on quit', err);
+    }
+
+    app.exit(0);
+  })();
 });
 
 app.on('window-all-closed', app.quit);

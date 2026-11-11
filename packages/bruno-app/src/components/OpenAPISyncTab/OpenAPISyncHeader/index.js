@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
-import { selectStoredSpecMeta } from 'providers/ReduxStore/slices/openapi-sync';
 import {
   IconCopy,
   IconDotsVertical,
@@ -37,7 +36,7 @@ const OpenAPISyncHeader = ({
     }
   }, [sourceUrl, sourceIsLocal, collection.pathname]);
 
-  const specMeta = useSelector(selectStoredSpecMeta(collection.uid));
+  const specMeta = useSelector((state) => state.openapiSync?.storedSpecMeta?.[collection.uid] || null);
   const title = specMeta?.title || spec?.info?.title || 'Unknown API';
 
   const copyUrl = async () => {
@@ -97,6 +96,7 @@ const OpenAPISyncHeader = ({
             size="sm"
             onClick={onCheck}
             disabled={!canCheck}
+            data-testid="openapi-sync-check-updates"
             loading={isLoading}
             icon={<IconRefresh size={14} />}
           >
@@ -109,7 +109,7 @@ const OpenAPISyncHeader = ({
           >
             View spec
           </Button>
-          <MenuDropdown items={menuItems} placement="bottom-end">
+          <MenuDropdown items={menuItems} placement="bottom-end" data-testid="openapi-sync-header-menu">
             <ActionIcon label="More options">
               <IconDotsVertical size={16} strokeWidth={2} />
             </ActionIcon>

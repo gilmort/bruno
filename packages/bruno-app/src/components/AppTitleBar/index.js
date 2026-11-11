@@ -1,10 +1,12 @@
 import React from 'react';
-import { IconCheck, IconChevronDown, IconFolder, IconHome, IconPin, IconPinned, IconPlus, IconDownload, IconSettings, IconMinus, IconSquare, IconX, IconCopy } from '@tabler/icons';
+import { IconCheck, IconChevronDown, IconFolder, IconHome, IconPin, IconPinned, IconPlus, IconDownload, IconSettings, IconMinus, IconSquare, IconX, IconCopy, IconLayoutSidebar } from '@tabler/icons';
 import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useDispatch, useSelector } from 'react-redux';
 
 import { savePreferences, showManageWorkspacePage, toggleSidebarCollapse } from 'providers/ReduxStore/slices/app';
+import { useIsHomeMode } from 'utils/plugins/homeMode';
+import { setLocalStorageValue, SIDEBAR_COLLAPSED_KEY } from 'utils/common/localStorage';
 import { closeConsole, openConsole } from 'providers/ReduxStore/slices/logs';
 import { createWorkspaceWithUniqueName, openWorkspaceDialog, switchWorkspace } from 'providers/ReduxStore/slices/workspaces/actions';
 import { sortWorkspaces, toggleWorkspacePin } from 'utils/workspaces';
@@ -51,6 +53,14 @@ const AppTitleBar = () => {
   useEffect(() => {
     const { ipcRenderer } = window;
     if (!ipcRenderer) return;
+
+    ipcRenderer.invoke('renderer:window-is-fullscreen')
+      .then((fullscreen) => {
+        setIsFullScreen(fullscreen);
+      })
+      .catch((error) => {
+        console.error('Error getting initial fullscreen state:', error);
+      });
 
     const removeEnterFullScreenListener = ipcRenderer.on('main:enter-full-screen', () => {
       setIsFullScreen(true);
@@ -111,6 +121,11 @@ const AppTitleBar = () => {
   const preferences = useSelector((state) => state.app.preferences);
   const sidebarCollapsed = useSelector((state) => state.app.sidebarCollapsed);
   const isConsoleOpen = useSelector((state) => state.logs.isConsoleOpen);
+  // MODO HOME: a MESMA condição que faz Bruno/index.js escolher o HomePanel (utils/plugins/homeMode
+  // — extraído para lá para as duas decisões nunca dessincronizar). Nesse estado a topbar normal —
+  // home, troca de workspace, devtools, layout — não serve a nada; fica só o botão que revela as
+  // coleções, e é a MESMA ação de sempre (toggleSidebarCollapse), nenhum estado novo.
+  const isHomeMode = useIsHomeMode();
   const activeWorkspace = workspaces.find((w) => w.uid === activeWorkspaceUid);
 
   // Sort workspaces according to preferences
@@ -138,14 +153,18 @@ const AppTitleBar = () => {
   };
 
   const handleWorkspaceSwitch = (workspaceUid) => {
+    if (workspaceUid === activeWorkspaceUid) return;
+
     dispatch(switchWorkspace(workspaceUid));
     toast.success(`Switched to ${getWorkspaceDisplayName(workspaces.find((w) => w.uid === workspaceUid)?.name)}`);
   };
 
   const handleOpenWorkspace = async () => {
     try {
-      await dispatch(openWorkspaceDialog());
-      toast.success('Workspace opened successfully');
+      const result = await dispatch(openWorkspaceDialog());
+      if (result) {
+        toast.success('Workspace opened successfully');
+      }
     } catch (error) {
       toast.error(error.message || 'Failed to open workspace');
     }
@@ -182,6 +201,7 @@ const AppTitleBar = () => {
 
   const handleToggleSidebar = () => {
     dispatch(toggleSidebarCollapse());
+    setLocalStorageValue(SIDEBAR_COLLAPSED_KEY, !sidebarCollapsed);
   };
 
   const handleToggleDevtools = () => {
@@ -254,7 +274,7 @@ const AppTitleBar = () => {
   }, [sortedWorkspaces, activeWorkspaceUid, preferences, handlePinWorkspace, handleCreateWorkspace]);
 
   return (
-    <StyledWrapper className={`app-titlebar ${osClass} ${isFullScreen ? 'fullscreen' : ''}`}>
+    <StyledWrapper data-testid="app-titlebar" className={`app-titlebar ${osClass} ${isFullScreen ? 'fullscreen' : ''}`}>
       {createWorkspaceModalOpen && (
         <CreateWorkspace onClose={() => setCreateWorkspaceModalOpen(false)} />
       )}
@@ -262,24 +282,41 @@ const AppTitleBar = () => {
         <ImportWorkspace onClose={() => setImportWorkspaceModalOpen(false)} />
       )}
 
-      <div className="titlebar-content">
-        <div className="titlebar-left">
-          {showWindowControls && <AppMenu />}
+      <div className={classNames('titlebar-content', { 'home-mode': isHomeMode })}>
+        {isHomeMode ? (
+          // MODO HOME: só o botão que revela as coleções (a mesma ação de sempre — clicar destrava
+          // a sidebar, o modo home sai sozinho porque a condição deixa de valer). Vertical, como o
+          // trilho do watchdog, para não parecer um botão de topbar perdido sozinho.
+          <div className="titlebar-left home-rail">
+            <ActionIcon
+              onClick={handleToggleSidebar}
+              label="Mostrar coleções"
+              size="lg"
+              className="home-sidebar-toggle"
+              data-testid="toggle-sidebar-button"
+            >
+              <IconLayoutSidebar size={16} stroke={1.5} />
+            </ActionIcon>
+          </div>
+        ) : (
+          <div className="titlebar-left">
+            {showWindowControls && <AppMenu />}
 
-          <ActionIcon onClick={handleHomeClick} label="Home" size="lg" className="home-button">
-            <IconHome size={16} stroke={1.5} />
-          </ActionIcon>
+            <ActionIcon onClick={handleHomeClick} label="Home" size="lg" className="home-button">
+              <IconHome size={16} stroke={1.5} />
+            </ActionIcon>
 
-          {/* Workspace Dropdown */}
-          <MenuDropdown
-            data-testid="workspace-menu"
-            items={workspaceMenuItems}
-            placement="bottom-start"
-            selectedItemId={activeWorkspaceUid}
-          >
-            <WorkspaceName />
-          </MenuDropdown>
-        </div>
+            {/* Workspace Dropdown */}
+            <MenuDropdown
+              data-testid="workspace-menu"
+              items={workspaceMenuItems}
+              placement="bottom-start"
+              selectedItemId={activeWorkspaceUid}
+            >
+              <WorkspaceName />
+            </MenuDropdown>
+          </div>
+        )}
 
         {/* Center section: Bruno logo + text */}
         <div className="titlebar-center">
@@ -287,31 +324,34 @@ const AppTitleBar = () => {
           <span className="bruno-text">Bruno</span>
         </div>
 
-        {/* Right section: Action buttons */}
+        {/* Right section: Action buttons — escondida no modo home (regra nº 2, "não hardcode": a
+            condição é a MESMA que decide o modo home, nada de flag redundante) */}
         <div className="titlebar-right">
-          <div className="titlebar-actions">
-            {/* Toggle sidebar */}
-            <ActionIcon
-              onClick={handleToggleSidebar}
-              label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
-              size="lg"
-              data-testid="toggle-sidebar-button"
-            >
-              <IconSidebarToggle collapsed={sidebarCollapsed} size={16} strokeWidth={1.5} />
-            </ActionIcon>
+          {!isHomeMode && (
+            <div className="titlebar-actions">
+              {/* Toggle sidebar */}
+              <ActionIcon
+                onClick={handleToggleSidebar}
+                label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+                size="lg"
+                data-testid="toggle-sidebar-button"
+              >
+                <IconSidebarToggle collapsed={sidebarCollapsed} size={16} strokeWidth={1.5} />
+              </ActionIcon>
 
-            {/* Toggle devtools */}
-            <ActionIcon
-              onClick={handleToggleDevtools}
-              label={isConsoleOpen ? 'Hide devtools' : 'Show devtools'}
-              size="lg"
-              data-testid="toggle-devtools-button"
-            >
-              <IconBottombarToggle collapsed={!isConsoleOpen} size={16} strokeWidth={1.5} />
-            </ActionIcon>
+              {/* Toggle devtools */}
+              <ActionIcon
+                onClick={handleToggleDevtools}
+                label={isConsoleOpen ? 'Hide devtools' : 'Show devtools'}
+                size="lg"
+                data-testid="toggle-devtools-button"
+              >
+                <IconBottombarToggle collapsed={!isConsoleOpen} size={16} strokeWidth={1.5} />
+              </ActionIcon>
 
-            <ResponseLayoutToggle />
-          </div>
+              <ResponseLayoutToggle />
+            </div>
+          )}
 
           {showWindowControls && (
             <div className="window-controls">

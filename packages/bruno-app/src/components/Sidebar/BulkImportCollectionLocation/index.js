@@ -1,24 +1,35 @@
-import React, { useRef, useEffect, useState, useMemo, forwardRef } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
+import { DEFAULT_AUTH_PLACEMENT, DEFAULT_REQUEST_NAME_SOURCE } from '@usebruno/common';
 import path from 'utils/common/path';
 import { browseDirectory, importCollection } from 'providers/ReduxStore/slices/collections/actions';
+import Portal from 'components/Portal';
 import Modal from 'components/Modal';
 import { isElectron } from 'utils/common/platform';
-import { IconX, IconLoader2, IconCheck, IconCaretDown } from '@tabler/icons';
+import { IconX, IconLoader2, IconCheck } from '@tabler/icons';
 import InfoTip from 'components/InfoTip/index';
 import Help from 'components/Help';
 import { addGlobalEnvironment } from 'providers/ReduxStore/slices/global-environments';
-import Dropdown from 'components/Dropdown';
+import { addLog } from 'providers/ReduxStore/slices/logs';
+import SelectionList from 'components/SelectionList';
+import FolderArrangementOption from 'components/Sidebar/ImportSettings/FolderArrangementOption';
+import CheckForSpecUpdatesOption from 'components/Sidebar/ImportSettings/CheckForSpecUpdatesOption';
+import ImportAdvancedSection from 'components/Sidebar/ImportSettings/ImportAdvancedSection';
+import AuthPlacementOption from 'components/Sidebar/ImportSettings/AuthPlacementOption';
+import RequestNameSourceOption from 'components/Sidebar/ImportSettings/RequestNameSourceOption';
+import ImportOptionsMenu from 'components/Sidebar/ImportSettings/ImportOptionsMenu';
 import { postmanToBruno } from 'utils/importers/postman-collection';
 import { convertInsomniaToBruno } from 'utils/importers/insomnia-collection';
-import { convertOpenapiToBruno } from 'utils/importers/openapi-collection';
+import { convertOpenapiToBruno, isSwagger2Spec, buildOpenApiSyncBrunoConfig } from 'utils/importers/openapi-collection';
 import { processBrunoCollection } from 'utils/importers/bruno-collection';
-import { wsdlToBruno } from '@usebruno/converters';
+import { convertWsdlToBruno } from 'utils/importers/wsdl-collection';
 import StyledWrapper from './StyledWrapper';
 import toast from 'react-hot-toast';
+import { showImportIssuesToast } from 'components/Toast/ImportIssuesToast';
 import get from 'lodash/get';
+import { DEFAULT_COLLECTION_FORMAT } from 'utils/common/constants';
 
 const STATUS = {
   LOADING: 'loading',
@@ -30,11 +41,6 @@ const IMPORT_TYPE = {
   BULK: 'bulk',
   MULTIPLE: 'multiple'
 };
-
-const groupingOptions = [
-  { value: 'tags', label: 'Tags', description: 'Group requests by OpenAPI/Swagger tags', testId: 'grouping-option-tags' },
-  { value: 'path', label: 'Paths', description: 'Group requests by URL path structure', testId: 'grouping-option-path' }
-];
 
 // Extract collection name from raw data
 const getCollectionName = (format, rawData) => {
@@ -65,19 +71,24 @@ const getCollectionName = (format, rawData) => {
 };
 
 // Convert raw data to Bruno collection format
-const convertCollection = async (format, rawData, groupingType) => {
+// Returns { collection, issues } where issues tracks items that were skipped or degraded
+const convertCollection = async (format, rawData, { groupingType, authPlacement, requestNameSource, filePath }) => {
   let collection;
+  let issues = [];
 
   switch (format) {
     case 'openapi':
-      collection = convertOpenapiToBruno(rawData, { groupBy: groupingType });
+      collection = convertOpenapiToBruno(rawData, { groupBy: groupingType, authPlacement, requestNameSource });
       break;
     case 'wsdl':
-      collection = await wsdlToBruno(rawData);
+      collection = await convertWsdlToBruno(rawData, filePath);
       break;
-    case 'postman':
-      collection = await postmanToBruno(rawData);
+    case 'postman': {
+      const result = await postmanToBruno(rawData);
+      collection = result.collection;
+      issues = result.issues || [];
       break;
+    }
     case 'insomnia':
       collection = convertInsomniaToBruno(rawData);
       break;
@@ -88,8 +99,14 @@ const convertCollection = async (format, rawData, groupingType) => {
       throw new Error('Unknown collection format');
   }
 
-  return collection;
+  return { collection, issues };
 };
+
+const DEFAULT_OPENAPI_SETTINGS = { groupingType: 'tags', authPlacement: DEFAULT_AUTH_PLACEMENT, requestNameSource: DEFAULT_REQUEST_NAME_SOURCE };
+
+const isOpenApiFile = (fileData) => fileData.type === 'openapi';
+
+const canSyncSpec = (fileData) => fileData.type === 'openapi' && !isSwagger2Spec(fileData.data) && Boolean(fileData.filePath);
 
 export function normalizeName(name) {
   if (typeof name !== 'string') {
@@ -127,7 +144,6 @@ export const BulkImportCollectionLocation = ({
   importData
 }) => {
   const dispatch = useDispatch();
-  const dropdownTippyRef = useRef();
 
   const { workspaces, activeWorkspaceUid } = useSelector((state) => state.workspaces);
   const preferences = useSelector((state) => state.app.preferences);
@@ -145,10 +161,13 @@ export const BulkImportCollectionLocation = ({
   const [selectedError, setSelectedError] = useState(null);
   const [applyToGlobal, setApplyToGlobal] = useState(true);
   const [applyToCollection, setApplyToCollection] = useState(false);
-  const [groupingType, setGroupingType] = useState('tags');
-  const [collectionFormat, setCollectionFormat] = useState('bru');
+  const [openApiSettings, setOpenApiSettings] = useState(DEFAULT_OPENAPI_SETTINGS);
+  const [collectionFormat, setCollectionFormat] = useState(DEFAULT_COLLECTION_FORMAT);
+  const [showFileFormat, setShowFileFormat] = useState(false);
+  const [enableCheckForSpecUpdates, setEnableCheckForSpecUpdates] = useState(false);
   const [renamedCollectionNames, setRenamedCollectionNames] = useState({});
   const [renamedEnvironmentNames, setRenamedEnvironmentNames] = useState({});
+  const [importIssues, setImportIssues] = useState({});
 
   // Extract data based on import type
   const importType = importData?.type;
@@ -158,6 +177,21 @@ export const BulkImportCollectionLocation = ({
   // For bulk import (ZIP files)
   const importedCollectionFromBulk = isBulkImport ? importData.collection : [];
   const importedEnvironmentFromBulk = isBulkImport ? (importData.environment || []) : [];
+
+  // Extract per-collection issues from bulk import data
+  useEffect(() => {
+    if (isBulkImport && importData.issues) {
+      const issuesMap = {};
+      importData.issues.forEach((entry, index) => {
+        if (entry.issues && entry.issues.length > 0 && importedCollectionFromBulk[index]) {
+          issuesMap[importedCollectionFromBulk[index].uid] = entry.issues;
+        }
+      });
+      setImportIssues(issuesMap);
+    } else {
+      setImportIssues({});
+    }
+  }, [isBulkImport, importData]);
 
   // For multiple files import
   const filesData = isMultipleImport ? importData.filesData : [];
@@ -181,8 +215,18 @@ export const BulkImportCollectionLocation = ({
   const [selectedCollections, setSelectedCollections] = useState(importedCollection.map((col) => col.uid));
   const [selectedEnvironments, setSelectedEnvironments] = useState(isBulkImport ? importedEnvironmentFromBulk.map((env) => env.uid) : []);
 
-  const allCollectionsSelected = selectedCollections.length === importedCollection.length;
-  const allEnvironmentsSelected = selectedEnvironments.length === importedEnvironment.length;
+  const filesOf = (collectionUids) => importedCollection
+    .filter((col) => collectionUids.includes(col.uid) && col._fileData)
+    .map((col) => col._fileData);
+  const selectedFiles = filesOf(selectedCollections);
+  const hasSelectedOpenApiSpec = selectedFiles.some(isOpenApiFile);
+  const hasSyncableSpec = selectedFiles.some(canSyncSpec);
+  const { groupingType, authPlacement, requestNameSource } = openApiSettings;
+  const changeOpenApiSetting = (name) => (value) => setOpenApiSettings((settings) => ({ ...settings, [name]: value }));
+  const showOpenApiOptions = isMultipleImport && hasOpenApiSpec;
+  const filesForSyncReason = hasSelectedOpenApiSpec ? selectedFiles : filesData;
+  const showSwagger2SyncReason = filesForSyncReason.some((fileData) => fileData.type === 'openapi' && isSwagger2Spec(fileData.data)) && !filesForSyncReason.some(canSyncSpec);
+  const hasSelectedSwagger2Spec = selectedFiles.some((fileData) => fileData.type === 'openapi' && isSwagger2Spec(fileData.data));
 
   // Sort collections to show selected items first, then unselected items
   // This helps users see their selections at the top of the list
@@ -225,9 +269,19 @@ export const BulkImportCollectionLocation = ({
   }, [status, selectedCollections]);
 
   // Handlers
+  const changeSelectedCollections = (nextSelected) => {
+    const nextFiles = filesOf(nextSelected);
+    setSelectedCollections(nextSelected);
+    if (!nextFiles.some(canSyncSpec)) {
+      setEnableCheckForSpecUpdates(false);
+    }
+    if (!nextFiles.some(isOpenApiFile)) {
+      setOpenApiSettings(DEFAULT_OPENAPI_SETTINGS);
+    }
+  };
   const handleCollectionToggle = (uid) => {
-    setSelectedCollections((prev) =>
-      prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]
+    changeSelectedCollections(
+      selectedCollections.includes(uid) ? selectedCollections.filter((id) => id !== uid) : [...selectedCollections, uid]
     );
   };
   const handleEnvironmentToggle = (uid) => {
@@ -235,30 +289,20 @@ export const BulkImportCollectionLocation = ({
       prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]
     );
   };
-  const handleSelectAllCollections = (e) => {
-    setSelectedCollections(e.target.checked ? importedCollection.map((col) => col.uid) : []);
-  };
-  const handleSelectAllEnvironments = (e) => {
-    setSelectedEnvironments(
-      e.target.checked ? importedEnvironment.map((env) => env.uid) : []
+  const handleSelectAllCollections = (e, filteredCollectionUids) => {
+    changeSelectedCollections(
+      e.target.checked
+        ? Array.from(new Set([...selectedCollections, ...filteredCollectionUids]))
+        : selectedCollections.filter((uid) => !filteredCollectionUids.includes(uid))
     );
   };
-
-  const onDropdownCreate = (ref) => {
-    dropdownTippyRef.current = ref;
+  const handleSelectAllEnvironments = (e, filteredEnvironmentUids) => {
+    setSelectedEnvironments((prevSelected) => (
+      e.target.checked
+        ? Array.from(new Set([...prevSelected, ...filteredEnvironmentUids]))
+        : prevSelected.filter((uid) => !filteredEnvironmentUids.includes(uid))
+    ));
   };
-
-  const GroupingDropdownIcon = forwardRef((props, ref) => {
-    const selectedOption = groupingOptions.find((option) => option.value === groupingType);
-    return (
-      <div ref={ref} className="flex items-center justify-between w-full current-group" data-testid="grouping-dropdown">
-        <div>
-          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{selectedOption.label}</div>
-        </div>
-        <IconCaretDown size={16} className="text-gray-400 ml-[0.25rem]" fill="currentColor" />
-      </div>
-    );
-  });
 
   const formik = useFormik({
     enableReinitialize: true,
@@ -274,21 +318,59 @@ export const BulkImportCollectionLocation = ({
     onSubmit: async (values) => {
       let filteredCollections = [];
       const selectedItems = importedCollection.filter((col) => selectedCollections.includes(col.uid));
+      const rawOpenAPISpecs = {};
 
       if (isMultipleImport) {
         // Convert selected files to collections at submit time
+        const collectedIssues = {};
         for (const item of selectedItems) {
           try {
-            const collection = await convertCollection(item._fileData.type, item._fileData.data, groupingType);
+            const { collection, issues } = await convertCollection(item._fileData.type, item._fileData.data, { groupingType, authPlacement, requestNameSource, filePath: item._fileData.filePath });
             if (collection) {
               // Preserve the synthetic UID so status tracking, rename tracking,
               // and UI rendering all use the same key
               collection.uid = item.uid;
               filteredCollections.push(collection);
+              if (enableCheckForSpecUpdates && canSyncSpec(item._fileData)) {
+                rawOpenAPISpecs[item.uid] = item._fileData.rawContent;
+              }
+              if (issues && issues.length > 0) {
+                collectedIssues[item.uid] = issues;
+              }
             }
           } catch (err) {
             console.warn(`Failed to convert file ${item._fileData.file.name}:`, err);
           }
+        }
+        if (Object.keys(collectedIssues).length > 0) {
+          setImportIssues(collectedIssues);
+
+          const allIssues = [];
+          const timestamp = new Date().toISOString();
+          Object.entries(collectedIssues).forEach(([uid, issues]) => {
+            const item = selectedItems.find((s) => s.uid === uid);
+            const name = item?.name || uid;
+            const skipped = issues.filter((i) => i.severity === 'error').length;
+            const warnings = issues.filter((i) => i.severity === 'warning').length;
+            const parts = [];
+            if (skipped > 0) parts.push(`skipped ${skipped} item(s)`);
+            if (warnings > 0) parts.push(`${warnings} warning(s)`);
+
+            // Per-collection summary header
+            dispatch(addLog({ type: 'warn', args: [`Import: ${name} — ${parts.join(', ')}`], timestamp }));
+
+            // Individual issues for this collection
+            issues.forEach((issue) => {
+              allIssues.push({ ...issue, path: `${name} > ${issue.path}` });
+              const logType = issue.severity === 'error' ? 'error' : 'warn';
+              const logArgs = [`[${issue.path}] ${issue.message}`];
+              if (issue.sourceItem) logArgs.push(issue.sourceItem);
+              dispatch(addLog({ type: logType, args: logArgs, timestamp }));
+            });
+          });
+
+          // Single toast for all collections
+          showImportIssuesToast(allIssues);
         }
       } else if (isBulkImport) {
         // For bulk import, use selected collections directly
@@ -327,6 +409,11 @@ export const BulkImportCollectionLocation = ({
         // Store renamed name for summary display
         if (finalName !== originalName) {
           renamedNames[collection.uid] = finalName;
+        }
+
+        if (Object.hasOwn(rawOpenAPISpecs, collection.uid)) {
+          const fileData = selectedItems.find((item) => item.uid === collection.uid)._fileData;
+          collection.brunoConfig = buildOpenApiSyncBrunoConfig(collection, { sourceUrl: fileData.filePath, groupBy: groupingType, authPlacement, requestNameSource });
         }
       });
 
@@ -414,7 +501,7 @@ export const BulkImportCollectionLocation = ({
       setImportStarted(true);
 
       if (filteredCollections.length > 1 || isBulkImport || isMultipleImport) {
-        dispatch(importCollection(filteredCollections, values.collectionLocation, { format: collectionFormat }))
+        dispatch(importCollection(filteredCollections, values.collectionLocation, { format: collectionFormat, rawOpenAPISpecs }))
           .catch((err) => {
             console.error('Failed to import collections', err);
             filteredCollections.forEach((collection) => {
@@ -443,7 +530,7 @@ export const BulkImportCollectionLocation = ({
 
   useEffect(() => {
     if (!isElectron()) {
-      return () => {};
+      return () => { };
     }
 
     const { ipcRenderer } = window;
@@ -520,121 +607,74 @@ export const BulkImportCollectionLocation = ({
   );
 
   return (
-    <StyledWrapper>
-      <Modal
-        size="md"
-        title="Bulk Import"
-        confirmText={importStarted ? 'Close' : 'Import'}
-        confirmDisabled={Boolean(!selectedCollections?.length)}
-        handleConfirm={onSubmit}
-        handleCancel={onClose}
-        showConfirm={true}
-        disableCloseOnOutsideClick={true}
-        disableEscapeKey={false}
-        hideCancel={importStarted}
-      >
-        <form className="bruno-form" onSubmit={(e) => e.preventDefault()}>
-          <div className="flex flex-col">
-            {importStarted ? (
-              <>
-                <div className="mb-6">
-                  <div className="flex items-center justify-between relative mb-5 w-full">
-                    <div className="font-semibold">Location</div>
-                    <div className="text-sm border border-slate-600 rounded px-3 py-1.5 ml-4 flex-1">
-                      {formik.values.collectionLocation
-                        || 'No location selected'}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="font-semibold">
-                      Importing Collections ({importStatus.totalSelected})
-                    </div>
-                    {importStatus.failedCount > 0 && importStatus.totalSelected > 0 && (
-                      <div className="text-sm text-red-500">
-                        ({importStatus.failedCount}/{importStatus.totalSelected} failed)
-                      </div>
-                    )}
-                  </div>
-                  <div className="max-h-[180px] overflow-y-scroll border border-slate-600 rounded-md py-2 scrollbar-visible">
-                    {sortedCollections
-                      .filter((collection) =>
-                        selectedCollections.includes(collection.uid)
-                      )
-                      .map((collection) => (
-                        <div
-                          key={collection.uid}
-                          className="flex items-center px-4 py-1.5 text-sm font-normal justify-between"
-                        >
-                          <div className="flex items-center flex-1">
-                            <div className="flex items-center mr-2">
-                              {status[collection.uid] === STATUS.LOADING && (
-                                <IconLoader2
-                                  className="animate-spin text-blue-500"
-                                  size={16}
-                                  strokeWidth={1.5}
-                                />
-                              )}
-                              {status[collection.uid] === STATUS.SUCCESS && (
-                                <div className="flex items-center text-green-500">
-                                  <IconCheck size={16} strokeWidth={1.5} />
-                                </div>
-                              )}
-                              {status[collection.uid] === STATUS.ERROR && (
-                                <div className="flex items-center">
-                                  <IconX
-                                    className="text-red-500"
-                                    size={16}
-                                    strokeWidth={1.5}
-                                  />
-                                </div>
-                              )}
-                            </div>
-                            <span>{renamedCollectionNames[collection.uid] || collection.name}</span>
-                          </div>
-                          {status[collection.uid] === STATUS.ERROR && (
-                            <button
-                              onClick={() =>
-                                handleErrorClick(
-                                  errorMessages[collection.uid],
-                                  collection.uid
-                                )}
-                              className="text-red-500 text-sm hover:underline"
-                            >
-                              See error
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                  </div>
-                </div>
-
-                {selectedEnvironments.length > 0 && (
+    <Portal>
+      <StyledWrapper>
+        <Modal
+          size="md"
+          title="Bulk Import"
+          dataTestId="bulk-import-collection-location-modal"
+          confirmText={importStarted ? 'Close' : 'Import'}
+          confirmDisabled={Boolean(!selectedCollections?.length)}
+          handleConfirm={onSubmit}
+          handleCancel={onClose}
+          showConfirm={true}
+          disableCloseOnOutsideClick={true}
+          disableEscapeKey={false}
+          hideCancel={importStarted}
+          footerLeft={
+            !importStarted ? (
+              <ImportOptionsMenu showFileFormat={showFileFormat} onToggleFileFormat={() => setShowFileFormat(!showFileFormat)} />
+            ) : null
+          }
+        >
+          <form className="bruno-form" onSubmit={(e) => e.preventDefault()}>
+            <div className="flex flex-col">
+              {importStarted ? (
+                <>
                   <div className="mb-6">
-                    <div className="font-semibold mb-2">
-                      Importing Environments ({selectedEnvironments.length})
+                    <div className="flex items-center justify-between relative mb-5 w-full">
+                      <div className="font-semibold">Location</div>
+                      <div className="text-sm border border-slate-600 rounded px-3 py-1.5 ml-4 flex-1">
+                        {formik.values.collectionLocation
+                          || 'No location selected'}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="font-semibold">
+                        Importing Collections ({importStatus.totalSelected})
+                      </div>
+                      {importStatus.failedCount > 0 && importStatus.totalSelected > 0 && (
+                        <div className="text-sm text-red-500">
+                          ({importStatus.failedCount}/{importStatus.totalSelected} failed)
+                        </div>
+                      )}
                     </div>
                     <div className="max-h-[180px] overflow-y-scroll border border-slate-600 rounded-md py-2 scrollbar-visible">
-                      {sortedEnvironments
-                        .filter((env) => selectedEnvironments.includes(env.uid))
-                        .map((env) => (
+                      {sortedCollections
+                        .filter((collection) =>
+                          selectedCollections.includes(collection.uid)
+                        )
+                        .map((collection) => (
                           <div
-                            key={env.uid}
+                            key={collection.uid}
                             className="flex items-center px-4 py-1.5 text-sm font-normal justify-between"
                           >
                             <div className="flex items-center flex-1">
                               <div className="flex items-center mr-2">
-                                {!environmentStatus[env.uid] || environmentStatus[env.uid] === STATUS.LOADING ? (
+                                {status[collection.uid] === STATUS.LOADING && (
                                   <IconLoader2
                                     className="animate-spin text-blue-500"
                                     size={16}
                                     strokeWidth={1.5}
                                   />
-                                ) : environmentStatus[env.uid] === STATUS.SUCCESS ? (
+                                )}
+                                {status[collection.uid] === STATUS.SUCCESS && (
                                   <div className="flex items-center text-green-500">
                                     <IconCheck size={16} strokeWidth={1.5} />
                                   </div>
-                                ) : environmentStatus[env.uid] === STATUS.ERROR ? (
+                                )}
+                                {status[collection.uid] === STATUS.ERROR && (
                                   <div className="flex items-center">
                                     <IconX
                                       className="text-red-500"
@@ -642,246 +682,298 @@ export const BulkImportCollectionLocation = ({
                                       strokeWidth={1.5}
                                     />
                                   </div>
-                                ) : null}
+                                )}
                               </div>
-                              <span>{renamedEnvironmentNames[env.uid] || env.name}</span>
+                              <span>{renamedCollectionNames[collection.uid] || collection.name}</span>
                             </div>
-                            {environmentStatus[env.uid] === STATUS.ERROR && (
+                            {status[collection.uid] === STATUS.ERROR && (
                               <button
                                 onClick={() =>
                                   handleErrorClick(
-                                    errorMessages[env.uid],
-                                    env.uid
+                                    errorMessages[collection.uid],
+                                    collection.uid
                                   )}
                                 className="text-red-500 text-sm hover:underline"
                               >
                                 See error
                               </button>
                             )}
+                            {status[collection.uid] === STATUS.SUCCESS && importIssues[collection.uid] && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-yellow-600 text-xs">
+                                  {importIssues[collection.uid].filter((i) => i.severity === 'error').length} item(s) skipped
+                                </span>
+                                <button
+                                  onClick={async () => {
+                                    const text = importIssues[collection.uid]
+                                      .map((i) => `[${i.severity.toUpperCase()}] ${i.path} — ${i.message}`)
+                                      .join('\n');
+                                    try {
+                                      await navigator.clipboard.writeText(text);
+                                      toast.success('Copied to clipboard', { duration: 2000 });
+                                    } catch (err) {
+                                      toast.error('Failed to copy to clipboard', { duration: 3000 });
+                                    }
+                                  }}
+                                  className="text-yellow-600 text-xs hover:underline"
+                                >
+                                  Copy
+                                </button>
+                              </div>
+                            )}
                           </div>
                         ))}
                     </div>
                   </div>
-                )}
-              </>
-            ) : (
-              <>
-                <div className="mb-6">
-                  <div className="font-semibold mb-2 flex justify-between items-center">
-                    <span>Collections ({importedCollection.length})</span>
-                    <label className="flex items-center text-sm font-normal select-none cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={allCollectionsSelected}
-                        onChange={handleSelectAllCollections}
-                        className="mr-2"
-                      />
-                      Select All
-                    </label>
-                  </div>
-                  <div className="max-h-[180px] overflow-y-scroll border border-slate-600 rounded-md py-2">
-                    {importedCollection.length === 0 && (
-                      <div className="px-4 py-2 text-gray-400 italic">
-                        No collections found
-                      </div>
-                    )}
-                    {sortedCollections.map((collection) => (
-                      <label
-                        key={collection.uid}
-                        className="flex items-center px-4 py-1.5 text-sm font-normal select-none cursor-pointer justify-between"
-                      >
-                        <div className="flex items-center flex-1">
-                          <input
-                            type="checkbox"
-                            checked={selectedCollections.includes(collection.uid)}
-                            onChange={() => handleCollectionToggle(collection.uid)}
-                            className="mr-3"
-                          />
-                          <span>{collection.name}</span>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </div>
 
-                {importType === 'bulk' && (
-                  <>
-                    <div className="mb-4">
-                      <div className="font-semibold mb-2 flex justify-between items-center">
-                        <span>Environments ({importedEnvironment.length})</span>
-                        <label className="flex items-center text-sm font-normal select-none cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={allEnvironmentsSelected}
-                            onChange={handleSelectAllEnvironments}
-                            className="mr-2"
-                          />
-                          Select All
-                        </label>
-                      </div>
-                      <div className="max-h-[180px] overflow-y-scroll border border-slate-600 rounded-md py-2 scrollbar-visible">
-                        {importedEnvironment.length === 0 && (
-                          <div className="px-4 py-2 text-gray-400 italic">
-                            No environments found
-                          </div>
-                        )}
-                        {sortedEnvironments.map((env) => (
-                          <label
-                            key={env.uid}
-                            className="flex items-center px-4 py-1.5 text-sm font-normal select-none cursor-pointer"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedEnvironments.includes(env.uid)}
-                              onChange={() => handleEnvironmentToggle(env.uid)}
-                              className="mr-3"
-                            />
-                            <span>{env.name}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
+                  {selectedEnvironments.length > 0 && (
                     <div className="mb-6">
                       <div className="font-semibold mb-2">
-                        Environment Assignment
+                        Importing Environments ({selectedEnvironments.length})
                       </div>
-                      <div className="flex gap-8 mt-2 ml-2">
-                        <label className="flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={applyToGlobal}
-                            onChange={(e) => setApplyToGlobal(e.target.checked)}
-                            className="mr-2"
-                          />
-                          <span className="ml-2">
-                            Global Environment
-                            <InfoTip
-                              content="Environments will be imported and stored as global, accessible across collections."
-                              infotipId="apply-to-global-infotip"
-                            />
-                          </span>
-                        </label>
-                        <label className="flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={applyToCollection}
-                            onChange={(e) =>
-                              setApplyToCollection(e.target.checked)}
-                            className="mr-2"
-                          />
-                          <span className="ml-2">
-                            Duplicate Across Collections
-                            <InfoTip
-                              content="Each imported collection will receive its own copy of the environments."
-                              infotipId="apply-to-each-infotip"
-                            />
-                          </span>
-                        </label>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                <div className="flex items-start flex-col relative">
-                  <div className="font-semibold mb-2">Location</div>
-                  <input
-                    id="collection-location"
-                    type="text"
-                    placeholder="Select a location to save the collection"
-                    name="collectionLocation"
-                    className="block textbox w-full cursor-pointer"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck="false"
-                    value={formik.values.collectionLocation || ''}
-                    onClick={browse}
-                    onChange={(e) => {
-                      formik.setFieldValue('collectionLocation', e.target.value);
-                    }}
-                  />
-                  {formik.touched.collectionLocation && formik.errors.collectionLocation ? (
-                    <div className="text-red-500 mt-1">
-                      {formik.errors.collectionLocation}
-                    </div>
-                  ) : null}
-                  <div className="mt-1">
-                    <span className="text-link cursor-pointer hover:underline" onClick={browse}>
-                      Browse
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <label htmlFor="format" className="flex items-center font-semibold">
-                    File Format
-                    <Help width="300">
-                      <p>Choose the file format for storing requests in this collection.</p>
-                      <p className="mt-2">
-                        <strong>OpenCollection (YAML):</strong> Industry-standard YAML format (.yml files)
-                      </p>
-                      <p className="mt-1">
-                        <strong>BRU:</strong> Bruno's native file format (.bru files)
-                      </p>
-                    </Help>
-                  </label>
-                  <select
-                    id="format"
-                    name="format"
-                    className="block textbox mt-2 w-full"
-                    value={collectionFormat}
-                    onChange={(e) => setCollectionFormat(e.target.value)}
-                  >
-                    <option value="yml">OpenCollection (YAML)</option>
-                    <option value="bru">BRU Format (.bru)</option>
-                  </select>
-                </div>
-
-                {isMultipleImport && hasOpenApiSpec && (
-                  <div>
-                    <div className="flex gap-4 items-center mt-4">
-                      <div>
-                        <label htmlFor="groupingType" className="block font-semibold">
-                          Folder arrangement
-                        </label>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 mb-2">
-                          Select whether to create folders according to the spec's paths or tags.
-                        </p>
-                      </div>
-                      <div className="relative">
-                        <Dropdown onCreate={onDropdownCreate} icon={<GroupingDropdownIcon />} placement="bottom-start">
-                          {groupingOptions.map((option) => (
+                      <div className="max-h-[180px] overflow-y-scroll border border-slate-600 rounded-md py-2 scrollbar-visible">
+                        {sortedEnvironments
+                          .filter((env) => selectedEnvironments.includes(env.uid))
+                          .map((env) => (
                             <div
-                              key={option.value}
-                              className="dropdown-item"
-                              data-testid={option.testId}
-                              onClick={() => {
-                                dropdownTippyRef?.current?.hide();
-                                setGroupingType(option.value);
-                              }}
+                              key={env.uid}
+                              className="flex items-center px-4 py-1.5 text-sm font-normal justify-between"
                             >
-                              {option.label}
+                              <div className="flex items-center flex-1">
+                                <div className="flex items-center mr-2">
+                                  {!environmentStatus[env.uid] || environmentStatus[env.uid] === STATUS.LOADING ? (
+                                    <IconLoader2
+                                      className="animate-spin text-blue-500"
+                                      size={16}
+                                      strokeWidth={1.5}
+                                    />
+                                  ) : environmentStatus[env.uid] === STATUS.SUCCESS ? (
+                                    <div className="flex items-center text-green-500">
+                                      <IconCheck size={16} strokeWidth={1.5} />
+                                    </div>
+                                  ) : environmentStatus[env.uid] === STATUS.ERROR ? (
+                                    <div className="flex items-center">
+                                      <IconX
+                                        className="text-red-500"
+                                        size={16}
+                                        strokeWidth={1.5}
+                                      />
+                                    </div>
+                                  ) : null}
+                                </div>
+                                <span>{renamedEnvironmentNames[env.uid] || env.name}</span>
+                              </div>
+                              {environmentStatus[env.uid] === STATUS.ERROR && (
+                                <button
+                                  onClick={() =>
+                                    handleErrorClick(
+                                      errorMessages[env.uid],
+                                      env.uid
+                                    )}
+                                  className="text-red-500 text-sm hover:underline"
+                                >
+                                  See error
+                                </button>
+                              )}
                             </div>
                           ))}
-                        </Dropdown>
                       </div>
                     </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="w-full mb-6">
+                    <SelectionList
+                      dataTestId="selection-section-collections"
+                      title="Collections"
+                      searchPlaceholder="Search Collections"
+                      items={sortedCollections}
+                      selectedItems={selectedCollections}
+                      onSelectAll={handleSelectAllCollections}
+                      onItemToggle={handleCollectionToggle}
+                      getItemId={(collection) => collection.uid}
+                      renderItemTitle={(collection) => collection.name}
+                      renderItemDescription={(collection) => collection._fileData?.file?.name}
+                      visibleRows={5}
+                      rowHeight={isMultipleImport ? 60 : 30}
+                      rowGap={4}
+                      emptyMessage="No collections found"
+                      showSelectedCount={true}
+                    />
                   </div>
-                )}
-              </>
-            )}
-          </div>
-        </form>
-      </Modal>
 
-      {showErrorModal && (
-        <ErrorModal
-          error={selectedError?.message}
-          onClose={() => setShowErrorModal(false)}
-        />
-      )}
-    </StyledWrapper>
+                  {importType === 'bulk' && (
+                    <>
+                      <div className="w-full mb-6">
+                        <SelectionList
+                          dataTestId="selection-section-environments"
+                          title="Environments"
+                          searchPlaceholder="Search Environments"
+                          items={sortedEnvironments}
+                          selectedItems={selectedEnvironments}
+                          onSelectAll={handleSelectAllEnvironments}
+                          onItemToggle={handleEnvironmentToggle}
+                          getItemId={(env) => env.uid}
+                          renderItemTitle={(env) => env.name}
+                          visibleRows={4}
+                          rowHeight={30}
+                          rowGap={4}
+                          emptyMessage="No environments found"
+                          showSelectedCount={true}
+                        />
+                      </div>
+
+                      <div className="mb-6">
+                        <div className="font-semibold mb-2">
+                          Environment Assignment
+                        </div>
+                        <div className="flex gap-8 mt-2 ml-2">
+                          <label className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={applyToGlobal}
+                              onChange={(e) => setApplyToGlobal(e.target.checked)}
+                              className="mr-2"
+                            />
+                            <span className="ml-2">
+                              Global Environment
+                              <InfoTip
+                                content="Environments will be imported and stored as global, accessible across collections."
+                                infotipId="apply-to-global-infotip"
+                              />
+                            </span>
+                          </label>
+                          <label className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={applyToCollection}
+                              onChange={(e) =>
+                                setApplyToCollection(e.target.checked)}
+                              className="mr-2"
+                            />
+                            <span className="ml-2">
+                              Duplicate Across Collections
+                              <InfoTip
+                                content="Each imported collection will receive its own copy of the environments."
+                                infotipId="apply-to-each-infotip"
+                              />
+                            </span>
+                          </label>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="flex items-start flex-col relative">
+                    <div className="font-semibold mb-2">Location</div>
+                    <input
+                      id="collection-location"
+                      data-testid="bulk-import-collection-location-input"
+                      type="text"
+                      placeholder="Select a location to save the collection"
+                      name="collectionLocation"
+                      className="block textbox w-full cursor-pointer"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck="false"
+                      value={formik.values.collectionLocation || ''}
+                      onClick={browse}
+                      onChange={(e) => {
+                        formik.setFieldValue('collectionLocation', e.target.value);
+                      }}
+                    />
+                    {formik.touched.collectionLocation && formik.errors.collectionLocation ? (
+                      <div className="text-red-500 mt-1">
+                        {formik.errors.collectionLocation}
+                      </div>
+                    ) : null}
+                    <div className="mt-1">
+                      <span className="text-link cursor-pointer hover:underline" onClick={browse}>
+                        Browse
+                      </span>
+                    </div>
+                  </div>
+
+                  {showFileFormat && (
+                    <div className="mt-4">
+                      <label htmlFor="format" className="flex items-center font-semibold">
+                        File Format
+                        <Help width="300">
+                          <p>Choose the file format for storing requests in this collection.</p>
+                          <p className="mt-2">
+                            <strong>OpenCollection (YAML):</strong> Industry-standard YAML format (.yml files)
+                          </p>
+                          <p className="mt-1">
+                            <strong>BRU:</strong> Bruno's native file format (.bru files)
+                          </p>
+                        </Help>
+                      </label>
+                      <select
+                        id="format"
+                        name="format"
+                        data-testid="bulk-import-collection-format-selector"
+                        className="block textbox mt-2 w-full"
+                        value={collectionFormat}
+                        onChange={(e) => setCollectionFormat(e.target.value)}
+                      >
+                        <option value="yml">OpenCollection (YAML)</option>
+                        <option value="bru">BRU Format (.bru)</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {showOpenApiOptions && (
+                    <ImportAdvancedSection title="OpenAPI Import configuration">
+                      <FolderArrangementOption
+                        value={groupingType}
+                        onChange={changeOpenApiSetting('groupingType')}
+                        disabled={!hasSelectedOpenApiSpec}
+                      />
+                      <div>
+                        <CheckForSpecUpdatesOption
+                          checked={enableCheckForSpecUpdates}
+                          onChange={setEnableCheckForSpecUpdates}
+                          disabled={!hasSyncableSpec}
+                          showSwagger2Note={showSwagger2SyncReason}
+                          testId="bulk-import-check-for-spec-updates"
+                          descriptionTestId="bulk-import-check-for-spec-updates-description"
+                        />
+                        <div role="status">
+                          {enableCheckForSpecUpdates && hasSelectedSwagger2Spec && (
+                            <p className="swagger2-sync-note mt-2" data-testid="bulk-import-swagger2-sync-note">
+                              Swagger 2.0 specs are not supported in OpenAPI sync.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <RequestNameSourceOption
+                        value={requestNameSource}
+                        onChange={changeOpenApiSetting('requestNameSource')}
+                        disabled={!hasSelectedOpenApiSpec}
+                      />
+                      <AuthPlacementOption
+                        value={authPlacement}
+                        onChange={changeOpenApiSetting('authPlacement')}
+                        disabled={!hasSelectedOpenApiSpec}
+                      />
+                    </ImportAdvancedSection>
+                  )}
+                </>
+              )}
+            </div>
+          </form>
+        </Modal>
+
+        {showErrorModal && (
+          <ErrorModal
+            error={selectedError?.message}
+            onClose={() => setShowErrorModal(false)}
+          />
+        )}
+      </StyledWrapper>
+    </Portal>
   );
 };
 

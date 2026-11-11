@@ -49,6 +49,22 @@ const StyledWrapper = styled.div`
     }
   }
 
+  .response-pane-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+    position: relative;
+    padding: 0 1rem;
+    margin-top: 1rem;
+  }
+
+  .response-tab-content {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
   .right-side-container {
     min-width: 0;
     flex-shrink: 1;
@@ -94,7 +110,7 @@ const StyledWrapper = styled.div`
     }
 
     .tab-active .button-dropdown-button {
-      border-color: ${(props) => props.theme.app.collection.toolbar.environmentSelector.border} !important;
+      border-color: transparent !important;
 
       &:hover {
         border-color: ${(props) => props.theme.app.collection.toolbar.environmentSelector.hoverBorder} !important;

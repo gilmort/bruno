@@ -1,23 +1,31 @@
-import React, { useRef, useEffect, useState, forwardRef } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import get from 'lodash/get';
+import { DEFAULT_AUTH_PLACEMENT, DEFAULT_REQUEST_NAME_SOURCE } from '@usebruno/common';
 import path from 'utils/common/path';
-import { IconCaretDown } from '@tabler/icons';
 import { browseDirectory } from 'providers/ReduxStore/slices/collections/actions';
 import { postmanToBruno } from 'utils/importers/postman-collection';
 import { convertInsomniaToBruno } from 'utils/importers/insomnia-collection';
-import { convertOpenapiToBruno } from 'utils/importers/openapi-collection';
+import { convertOpenapiToBruno, isSwagger2Spec, buildOpenApiSyncBrunoConfig } from 'utils/importers/openapi-collection';
 import { processBrunoCollection } from 'utils/importers/bruno-collection';
 import { processOpenCollection } from 'utils/importers/opencollection';
-import { wsdlToBruno } from '@usebruno/converters';
+import { convertWsdlToBruno } from 'utils/importers/wsdl-collection';
 import { toastError } from 'utils/common/error';
-import { useBetaFeature, BETA_FEATURES } from 'utils/beta-features';
+import { addLog } from 'providers/ReduxStore/slices/logs';
+import Portal from 'components/Portal';
 import Modal from 'components/Modal';
 import Help from 'components/Help';
-import Dropdown from 'components/Dropdown';
-import StyledWrapper from './StyledWrapper';
+import ToggleSwitch from 'components/ToggleSwitch';
+import ImportSettingRow from 'components/Sidebar/ImportSettings/ImportSettingRow';
+import FolderArrangementOption from 'components/Sidebar/ImportSettings/FolderArrangementOption';
+import CheckForSpecUpdatesOption from 'components/Sidebar/ImportSettings/CheckForSpecUpdatesOption';
+import ImportAdvancedSection from 'components/Sidebar/ImportSettings/ImportAdvancedSection';
+import AuthPlacementOption from 'components/Sidebar/ImportSettings/AuthPlacementOption';
+import RequestNameSourceOption from 'components/Sidebar/ImportSettings/RequestNameSourceOption';
+import ImportOptionsMenu from 'components/Sidebar/ImportSettings/ImportOptionsMenu';
+import { showImportIssuesToast } from 'components/Toast/ImportIssuesToast';
 import { DEFAULT_COLLECTION_FORMAT } from 'utils/common/constants';
 
 // Extract collection name from raw data
@@ -53,20 +61,25 @@ const getCollectionName = (format, rawData) => {
 };
 
 // Convert raw data to Bruno collection format
-const convertCollection = async (format, rawData, groupingType, collectionFormat) => {
+// Returns { collection, issues } where issues tracks items that were skipped or degraded
+const convertCollection = async (format, rawData, { groupingType, collectionFormat, authPlacement, requestNameSource, preserveScripts, filePath } = {}) => {
   try {
     let collection;
+    let issues = [];
 
     switch (format) {
       case 'openapi':
-        collection = convertOpenapiToBruno(rawData, { groupBy: groupingType, collectionFormat });
+        collection = convertOpenapiToBruno(rawData, { groupBy: groupingType, collectionFormat, authPlacement, requestNameSource });
         break;
       case 'wsdl':
-        collection = await wsdlToBruno(rawData);
+        collection = await convertWsdlToBruno(rawData, filePath);
         break;
-      case 'postman':
-        collection = await postmanToBruno(rawData);
+      case 'postman': {
+        const result = await postmanToBruno(rawData, { preserveScripts });
+        collection = result.collection;
+        issues = result.issues || [];
         break;
+      }
       case 'insomnia':
         collection = convertInsomniaToBruno(rawData);
         break;
@@ -84,7 +97,7 @@ const convertCollection = async (format, rawData, groupingType, collectionFormat
         throw new Error('Unknown collection format');
     }
 
-    return collection;
+    return { collection, issues };
   } catch (err) {
     console.error('Conversion error:', err);
     toastError(err, 'Failed to convert collection');
@@ -92,25 +105,23 @@ const convertCollection = async (format, rawData, groupingType, collectionFormat
   }
 };
 
-const groupingOptions = [
-  { value: 'tags', label: 'Tags', description: 'Group requests by OpenAPI/Swagger tags', testId: 'grouping-option-tags' },
-  { value: 'path', label: 'Paths', description: 'Group requests by URL path structure', testId: 'grouping-option-path' }
-];
-
 const ImportCollectionLocation = ({ onClose, handleSubmit, rawData, format, sourceUrl, filePath, rawContent }) => {
   const inputRef = useRef();
   const dispatch = useDispatch();
   const [groupingType, setGroupingType] = useState('tags');
   const [collectionFormat, setCollectionFormat] = useState(DEFAULT_COLLECTION_FORMAT);
-  const isOpenAPISyncEnabled = useBetaFeature(BETA_FEATURES.OPENAPI_SYNC);
-  const [enableCheckForSpecUpdates, setEnableCheckForSpecUpdates] = useState(isOpenAPISyncEnabled);
-  const dropdownTippyRef = useRef();
+  const [showFileFormat, setShowFileFormat] = useState(false);
+  const [enableCheckForSpecUpdates, setEnableCheckForSpecUpdates] = useState(false);
+  const [authPlacement, setAuthPlacement] = useState(DEFAULT_AUTH_PLACEMENT);
+  const [requestNameSource, setRequestNameSource] = useState(DEFAULT_REQUEST_NAME_SOURCE);
+  const [preserveScripts, setPreserveScripts] = useState(false);
   const isOpenApi = format === 'openapi';
+  const isPostman = format === 'postman';
   const isZipImport = format === 'bruno-zip';
   const isOpenApiFromUrl = isOpenApi && !!sourceUrl && !filePath;
   const isOpenApiFromFile = isOpenApi && !!filePath && !sourceUrl;
-  const isSwagger2 = isOpenApi && rawData?.swagger && String(rawData.swagger).startsWith('2');
-  const showCheckForSpecUpdatesOption = isOpenAPISyncEnabled && (isOpenApiFromUrl || isOpenApiFromFile);
+  const isSwagger2 = isOpenApi && isSwagger2Spec(rawData);
+  const showCheckForSpecUpdatesOption = isOpenApiFromUrl || isOpenApiFromFile;
 
   const { workspaces, activeWorkspaceUid } = useSelector((state) => state.workspaces);
   const preferences = useSelector((state) => state.app.preferences);
@@ -135,53 +146,39 @@ const ImportCollectionLocation = ({ onClose, handleSubmit, rawData, format, sour
         .required('Location is required')
     }),
     onSubmit: async (values) => {
-      const convertedCollection = await convertCollection(format, rawData, groupingType, collectionFormat);
+      const { collection: convertedCollection, issues } = await convertCollection(format, rawData, { groupingType, collectionFormat, authPlacement, requestNameSource, preserveScripts, filePath });
       const options = { format: collectionFormat };
 
       if (showCheckForSpecUpdatesOption && enableCheckForSpecUpdates) {
         const syncSourceUrl = sourceUrl || filePath; // URL or absolute path (backend converts to relative)
-        const baseBrunoConfig = {
-          version: convertedCollection.version || '1',
-          name: convertedCollection.name || 'Untitled Collection',
-          type: 'collection',
-          ignore: ['node_modules', '.git']
-        };
-
-        convertedCollection.brunoConfig = {
-          ...baseBrunoConfig,
-          ...convertedCollection.brunoConfig,
-          openapi: [
-            {
-              sourceUrl: syncSourceUrl,
-              groupBy: groupingType,
-              autoCheck: true,
-              autoCheckInterval: 5
-            }
-          ]
-        };
-
-        options.rawOpenAPISpec = rawContent || rawData;
+        convertedCollection.brunoConfig = buildOpenApiSyncBrunoConfig(convertedCollection, { sourceUrl: syncSourceUrl, groupBy: groupingType, authPlacement, requestNameSource });
+        options.rawOpenAPISpecs = { [convertedCollection.uid]: rawContent || rawData };
       }
 
       handleSubmit(convertedCollection, values.collectionLocation, options);
+
+      if (issues && issues.length > 0) {
+        // Show toast with copy/report actions
+        showImportIssuesToast(issues);
+
+        // Log each issue to Bruno's internal console
+        const skipped = issues.filter((i) => i.severity === 'error').length;
+        const warnings = issues.filter((i) => i.severity === 'warning').length;
+        const parts = [];
+        if (skipped > 0) parts.push(`skipped ${skipped} item(s)`);
+        if (warnings > 0) parts.push(`${warnings} warning(s)`);
+        const timestamp = new Date().toISOString();
+        dispatch(addLog({ type: 'warn', args: [`Import: ${collectionName} — ${parts.join(', ')}`], timestamp }));
+        issues.forEach((issue) => {
+          const logType = issue.severity === 'error' ? 'error' : 'warn';
+          const logArgs = [`[${issue.path}] ${issue.message}`];
+          if (issue.sourceItem) logArgs.push(issue.sourceItem);
+          dispatch(addLog({ type: logType, args: logArgs, timestamp }));
+        });
+      }
     }
   });
 
-  const onDropdownCreate = (ref) => {
-    dropdownTippyRef.current = ref;
-  };
-
-  const GroupingDropdownIcon = forwardRef((props, ref) => {
-    const selectedOption = groupingOptions.find((option) => option.value === groupingType);
-    return (
-      <div ref={ref} className="flex items-center justify-between w-full current-group" data-testid="grouping-dropdown">
-        <div>
-          <div className="font-medium text-gray-900 dark:text-gray-100">{selectedOption.label}</div>
-        </div>
-        <IconCaretDown size={16} className="text-gray-400 ml-[0.25rem]" fill="currentColor" />
-      </div>
-    );
-  });
   const browse = () => {
     dispatch(browseDirectory())
       .then((dirPath) => {
@@ -216,7 +213,7 @@ const ImportCollectionLocation = ({ onClose, handleSubmit, rawData, format, sour
   };
 
   return (
-    <StyledWrapper>
+    <Portal>
       <Modal
         size="md"
         title="Import Collection"
@@ -224,6 +221,11 @@ const ImportCollectionLocation = ({ onClose, handleSubmit, rawData, format, sour
         handleConfirm={onSubmit}
         handleCancel={onClose}
         dataTestId="import-collection-location-modal"
+        footerLeft={
+          !isZipImport ? (
+            <ImportOptionsMenu showFileFormat={showFileFormat} onToggleFileFormat={() => setShowFileFormat(!showFileFormat)} />
+          ) : null
+        }
       >
         <form className="bruno-form" onSubmit={(e) => e.preventDefault()}>
           <div>
@@ -261,12 +263,16 @@ const ImportCollectionLocation = ({ onClose, handleSubmit, rawData, format, sour
             ) : null}
 
             <div className="mt-1">
-              <span className="text-link cursor-pointer hover:underline" onClick={browse}>
+              <span
+                data-testid="import-collection-browse-link"
+                className="text-link cursor-pointer hover:underline"
+                onClick={browse}
+              >
                 Browse
               </span>
             </div>
 
-            {!isZipImport && (
+            {showFileFormat && !isZipImport && (
               <div className="mt-4">
                 <label htmlFor="format" className="flex items-center font-medium">
                   File Format
@@ -294,58 +300,38 @@ const ImportCollectionLocation = ({ onClose, handleSubmit, rawData, format, sour
             )}
           </div>
 
-          {isOpenApi && (
-            <div className="mt-4 flex gap-4 items-center justify-between">
-              <div>
-                <label htmlFor="groupingType" className="block font-medium">
-                  Folder arrangement
-                </label>
-                <p className="text-muted text-xs mt-1 mb-2">
-                  Select whether to create folders according to the spec's paths or tags.
-                </p>
-              </div>
-              <div className="relative">
-                <Dropdown onCreate={onDropdownCreate} icon={<GroupingDropdownIcon />} placement="bottom-start">
-                  {groupingOptions.map((option) => (
-                    <div
-                      key={option.value}
-                      className="dropdown-item"
-                      data-testid={option.testId}
-                      onClick={() => {
-                        dropdownTippyRef?.current?.hide();
-                        setGroupingType(option.value);
-                      }}
-                    >
-                      {option.label}
-                    </div>
-                  ))}
-                </Dropdown>
-              </div>
-            </div>
-          )}
-
+          {isOpenApi && <FolderArrangementOption className="mt-4" value={groupingType} onChange={setGroupingType} />}
           {showCheckForSpecUpdatesOption && (
-            <div className={`mt-4 ${isSwagger2 ? 'opacity-50 pointer-events-none' : ''}`}>
-              <label className={`flex items-center gap-2 ${isSwagger2 ? '' : 'cursor-pointer'}`}>
-                <input
-                  type="checkbox"
-                  checked={isSwagger2 ? false : enableCheckForSpecUpdates}
-                  onChange={(e) => setEnableCheckForSpecUpdates(e.target.checked)}
-                  disabled={isSwagger2}
-                  className={`checkbox ${isSwagger2 ? '' : 'cursor-pointer'}`}
+            <CheckForSpecUpdatesOption
+              className="mt-4"
+              checked={!isSwagger2 && enableCheckForSpecUpdates}
+              onChange={setEnableCheckForSpecUpdates}
+              disabled={isSwagger2}
+              showSwagger2Note={isSwagger2}
+              testId="check-for-spec-updates-toggle"
+            />
+          )}
+          {isOpenApi && (
+            <ImportAdvancedSection>
+              <RequestNameSourceOption value={requestNameSource} onChange={setRequestNameSource} />
+              <AuthPlacementOption value={authPlacement} onChange={setAuthPlacement} />
+            </ImportAdvancedSection>
+          )}
+          {isPostman && (
+            <ImportAdvancedSection>
+              <ImportSettingRow label="Preserve scripts" description="Import Postman scripts without translating them." isSwitch>
+                <ToggleSwitch
+                  isOn={preserveScripts}
+                  handleToggle={() => setPreserveScripts(!preserveScripts)}
+                  size="2xs"
+                  data-testid="preserve-scripts-toggle"
                 />
-                <span className="font-medium">Check for Spec Updates</span>
-              </label>
-              <p className="text-muted text-xs mt-1">
-                {isSwagger2
-                  ? 'OpenAPI Sync is not supported for Swagger 2.0 specs.'
-                  : 'Stay notified of spec changes and sync your collection with the spec.'}
-              </p>
-            </div>
+              </ImportSettingRow>
+            </ImportAdvancedSection>
           )}
         </form>
       </Modal>
-    </StyledWrapper>
+    </Portal>
   );
 };
 

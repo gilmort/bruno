@@ -33,6 +33,23 @@ const Wrapper = styled.div`
     -webkit-app-region: no-drag;
   }
 
+  /* MODO HOME: só o botão que revela as coleções, no estilo vertical/pastilha do trilho do
+     watchdog — pill preenchida, sem o "ícone fantasma" que só aparece no hover. É a MESMA cor de
+     seleção usada lá (#4772b3 no hover), pensada para não depender de nenhum token de tema. */
+  .home-rail {
+    margin-left: 10px;
+  }
+  .home-sidebar-toggle {
+    width: 26px;
+    height: 22px;
+    border-radius: 4px;
+    background: rgba(127, 127, 127, 0.14);
+  }
+  .home-sidebar-toggle:hover {
+    background: #4772b3;
+    color: #fff;
+  }
+
   /* Left section */
   .titlebar-left {
     display: flex;
