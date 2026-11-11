@@ -96,7 +96,7 @@ const template = [
     role: 'help',
     submenu: [
       {
-        label: 'About Hostdog',
+        label: 'About Gilmort\'s Bruno',
         click: () => {
           const aboutWindow = new BrowserWindow({
             width: 350,
