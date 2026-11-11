@@ -1,0 +1,27 @@
+Makefile
+  s_cc7467b480df8b::t_ecb9a0be7a029d 32,34-39,41,44,48
+packages/bruno-app/src/components/AppTitleBar/index.js
+  s_cc7467b480df8b::t_88d19930585468 321,324
+packages/bruno-app/src/components/WelcomeModal/index.js
+  s_cc7467b480df8b::t_8c8844cbf06a21 110
+packages/bruno-electron/src/app/menu-template.js
+  s_cc7467b480df8b::t_6dcd79cb0eac61 99
+packages/bruno-electron/src/index.js
+  s_cc7467b480df8b::t_bd7833ec6808aa 283
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "a6f13bf332b59755b9e5d60c9a6f307746142ba1",
+  "prompts": {},
+  "sessions": {
+    "s_cc7467b480df8b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_cc7467b480df8b",
+        "model": "unknown"
+      },
+      "human_author": "gilmort <17356152+gilmort@users.noreply.github.com>"
+    }
+  }
+}
