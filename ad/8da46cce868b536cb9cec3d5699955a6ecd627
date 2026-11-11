@@ -1,0 +1,19 @@
+Makefile
+  s_cdc5f3c72d6f42::t_120d7a3ff29851 1-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "ad8da46cce868b536cb9cec3d5699955a6ecd627",
+  "prompts": {},
+  "sessions": {
+    "s_cdc5f3c72d6f42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_cdc5f3c72d6f42",
+        "model": "unknown"
+      },
+      "human_author": "gilmort <17356152+gilmort@users.noreply.github.com>"
+    }
+  }
+}
