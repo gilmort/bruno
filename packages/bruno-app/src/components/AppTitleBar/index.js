@@ -318,10 +318,10 @@ const AppTitleBar = () => {
           </div>
         )}
 
-        {/* Center section: Gilmort's Bruno logo + text */}
+        {/* Center section: Bruno logo + text */}
         <div className="titlebar-center">
           <Bruno width={18} />
-          <span className="bruno-text">Gilmort's Bruno</span>
+          <span className="bruno-text">Bruno</span>
         </div>
 
         {/* Right section: Action buttons — escondida no modo home (regra nº 2, "não hardcode": a

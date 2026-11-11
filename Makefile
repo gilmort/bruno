@@ -29,16 +29,23 @@ deps: ## Builda os pacotes internos do monorepo (bruno-common, filestore, io, sq
 	npm run build:bruno-sqlite
 	npm run sandbox:bundle-libraries --workspace=packages/bruno-js
 
-web: deps ## Builda o frontend (bruno-app)
+web: deps ## Builda o frontend (bruno-app) e copia pra packages/bruno-electron/web
 	npm run build:web
+	# electron-builder empacota packages/bruno-electron/web, não o dist/ do bruno-app —
+	# sem esta cópia o .app fica sempre com o build anterior, por mais que o resto rode.
+	rm -rf packages/bruno-electron/web
+	mkdir packages/bruno-electron/web
+	cp -r packages/bruno-app/dist/* packages/bruno-electron/web
+	find packages/bruno-electron/web -name '*.map' -type f -delete
 
-electron: ## Empacota só o .app da arquitetura nativa, sem gerar dmg/pkg/zip (rápido)
+electron: web ## Rebuilda o web e empacota o .app da arquitetura nativa (sem dmg/pkg/zip)
 	# --dir pula notarização/assinatura real e os instaladores — não precisamos
 	# disso para rodar localmente, só do .app em si.
+	rm -rf packages/bruno-electron/out
 	cd packages/bruno-electron && npx electron-builder --dir --config electron-builder-config.js --$(ARCH)
 	@echo "empacotado: $(APP)"
 
-package: web electron ## Pipeline completo: pacotes internos + frontend + .app
+package: electron ## Pipeline completo: pacotes internos + frontend + .app
 
 install: ## Symlinka ~/Applications/Bruno.app para o .app gerado (atualiza sozinho a cada rebuild)
 	@set -e; \
